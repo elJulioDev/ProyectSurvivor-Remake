@@ -5,6 +5,7 @@ class_name SniperWeapon
 extends Node2D
 
 # ── Stats base ──────────────────────────────────────────────────────────────
+var crosshair_type: int     = 3     # 3 = SNIPER (Mira de francotirador)
 var cooldown: float         = 100.0
 var current_cooldown: float = 0.0
 var damage: float           = 110.0

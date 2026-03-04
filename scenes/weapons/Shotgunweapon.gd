@@ -5,6 +5,7 @@ class_name ShotgunWeapon
 extends Node2D
 
 # ── Stats base (en unidades de frames a 60fps) ─────────────────────────────
+var crosshair_type: int   = 1
 var cooldown: float       = 50.0
 var current_cooldown: float = 0.0
 var damage: float         = 18.0

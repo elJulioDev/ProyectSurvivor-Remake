@@ -5,6 +5,7 @@ class_name LaserWeapon
 extends Node2D
 
 # ── Stats base ──────────────────────────────────────────────────────────────
+var crosshair_type: int    = 2
 var cooldown: float        = 0.0    # sin cooldown entre activaciones
 var current_cooldown: float = 0.0
 var damage: float          = 30.0   # DPS base
