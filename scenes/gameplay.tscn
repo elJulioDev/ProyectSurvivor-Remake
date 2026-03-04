@@ -1,3 +1,44 @@
 [gd_scene format=3 uid="uid://daig871mpycsa"]
 
-[node name="Gameplay" type="Node2D" unique_id=844400996]
+[ext_resource type="Script" uid="uid://lbco4d7tvpgt" path="res://scenes/gameplay.gd" id="1_l1v76"]
+[ext_resource type="Script" uid="uid://cudqalr7suo7i" path="res://scripts/world/background_layer.gd" id="2_ct7aa"]
+[ext_resource type="PackedScene" uid="uid://j1e488b6hoow" path="res://entities/player.tscn" id="3_ocj2s"]
+
+[node name="Gameplay" type="Node2D" unique_id=1330324624]
+script = ExtResource("1_l1v76")
+
+[node name="World" type="Node2D" parent="." unique_id=1752792137]
+
+[node name="BackgroundLayer" type="Node2D" parent="World" unique_id=883696639]
+script = ExtResource("2_ct7aa")
+
+[node name="FloorDecals" type="Node2D" parent="World" unique_id=80115748]
+
+[node name="Gems" type="Node2D" parent="World" unique_id=1283402906]
+
+[node name="Enemies" type="Node2D" parent="World" unique_id=1087018824]
+
+[node name="Projectiles" type="Node2D" parent="World" unique_id=1478964526]
+
+[node name="EnemyProjectiles" type="Node2D" parent="World" unique_id=1398668444]
+
+[node name="Player" parent="World" unique_id=1871687937 instance=ExtResource("3_ocj2s")]
+script = null
+
+[node name="Camera2D" type="Camera2D" parent="." unique_id=584623327]
+limit_left = 0
+limit_top = 0
+limit_right = 12000
+limit_bottom = 9000
+position_smoothing_enabled = true
+
+[node name="HUD" type="CanvasLayer" parent="." unique_id=214702150]
+
+[node name="HUDControl" type="Control" parent="HUD" unique_id=1703175734]
+layout_mode = 3
+anchors_preset = 0
+offset_right = 40.0
+offset_bottom = 40.0
+metadata/_edit_use_anchors_ = true
+
+[node name="Particles" type="Node2D" parent="." unique_id=1261640654]

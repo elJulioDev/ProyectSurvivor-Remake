@@ -25,14 +25,17 @@ func _ready() -> void:
 	_setup_camera()
 	# _setup_spawn_manager() <-- COMENTADO HASTA CREARLO
 	
-	# El Player ya está en el árbol, buscarlo
 	player_ref = $World/Player
 	if player_ref:
-		# Conectamos las señales solo si el jugador tiene estos eventos definidos
 		if player_ref.has_user_signal("died"):
 			player_ref.died.connect(_on_player_died)
 		if player_ref.has_user_signal("leveled_up"):
 			player_ref.leveled_up.connect(_on_player_leveled_up)
+			
+		# ── NUEVO: adjuntar la cámara al jugador ──
+		camera.reparent(player_ref) 
+		camera.position = Vector2.ZERO
+		camera.make_current()
 
 func _setup_camera() -> void:
 	camera.limit_left   = 0

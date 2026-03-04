@@ -1,3 +1,17 @@
 [gd_scene format=3 uid="uid://j1e488b6hoow"]
 
-[node name="Player" type="Node2D" unique_id=235779046]
+[ext_resource type="Script" uid="uid://byo7as7cyj06x" path="res://scenes/player.gd" id="1_merdl"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_0wfyh"]
+
+[node name="Player" type="CharacterBody2D" unique_id=1871687937]
+script = ExtResource("1_merdl")
+
+[node name="DrawNode" type="Node2D" parent="." unique_id=762626274]
+
+[node name="WeaponPivot" type="Node2D" parent="." unique_id=1308338523]
+
+[node name="HealthBar" type="Node2D" parent="." unique_id=1370185272]
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="." unique_id=1754735301]
+shape = SubResource("RectangleShape2D_0wfyh")
