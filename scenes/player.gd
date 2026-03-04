@@ -2,16 +2,6 @@ extends CharacterBody2D
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #  player.gd — ProyectSurvivor
-#
-#  CORRECCIONES v3:
-#    · Dash: is_action_just_pressed() dentro de _physics_process
-#      (infalible, no puede ser bloqueado por otros nodos)
-#    · dash_unlocked = true por defecto para probar sin upgrade
-#    · Fricción frame-rate independent: velocity *= pow(0.85, dt)
-#    · Dead-zone correcta: 6 px/s (= 0.1 px/frame × 60)
-#
-#  INPUT MAP requerido:
-#    move_up / move_down / move_left / move_right / dash
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 signal died
@@ -47,6 +37,10 @@ var is_alive         : bool  = true
 var level            : int   = 1
 var experience       : float = 0.0
 var experience_next  : float = 50.0
+## Alias para compatibilidad con hud.gd
+var experience_next_level : float :
+	get: return experience_next
+	set(v): experience_next = v
 var pending_level_ups: int   = 0
 var upgrade_counts   : Dictionary = {}
 var xp_mult          : float = 1.0
@@ -67,7 +61,7 @@ var lifesteal_chance      : float = 0.0
 var lifesteal             : float = 5.0
 
 # ── Estado interno ────────────────────────────────────────────────
-var dash_unlocked      : bool  = true   # true para poder probarlo de inmediato
+var dash_unlocked      : bool  = true
 var dash_active        : bool  = false
 var dash_duration_mult : float = 1.0
 var dash_cooldown_mult : float = 1.0
@@ -87,10 +81,13 @@ var _damage_flash_timer : float = 0.0
 @onready var _weapon_pivot: Node2D = get_node_or_null("WeaponPivot")
 
 # ── Sistema de Armas ──────────────────────────────────────────────
-var active_weapons: Array[Node2D] = []
-var passive_weapons: Array[Node2D] = []
-var unlocked_weapon_names: Array[String] = ["PistolWeapon"] # Arma inicial
-var current_weapon_index: int = 0
+## Referencia a active_weapons desde HUD (alias de weapons)
+var weapons : Array[Node2D] :
+	get: return active_weapons
+var active_weapons  : Array[Node2D] = []
+var passive_weapons : Array[Node2D] = []
+var unlocked_weapon_names : Array[String] = []
+var current_weapon_index  : int = 0
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #  CICLO PRINCIPAL
@@ -98,13 +95,17 @@ var current_weapon_index: int = 0
 
 func _ready() -> void:
 	add_to_group("player")
+	# Auto-equipar pistola para poder testear sin upgrades
+	add_weapon("PistolWeapon")
+	add_weapon("Shotgunweapon")
+	add_weapon("Assaultrifleweapon")
+	add_weapon("Laserweapon")
+	add_weapon("Sniperweapon")
 
 func _physics_process(delta: float) -> void:
 	if not is_alive:
 		return
 
-	# Dash: is_action_just_pressed dentro de _physics_process es
-	# la única forma 100% fiable — no puede ser bloqueado por la UI
 	if Input.is_action_just_pressed("dash"):
 		_attempt_dash()
 
@@ -114,6 +115,11 @@ func _physics_process(delta: float) -> void:
 	_clamp_to_world()
 	move_and_slide()
 	_process_weapons(delta)
+
+	# Disparo con click izquierdo
+	if Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
+		attack()
+
 	queue_redraw()
 
 # ── Apuntado ──────────────────────────────────────────────────────
@@ -179,10 +185,10 @@ func _handle_movement(delta: float) -> void:
 	if input_dir.length_squared() > 1.0:
 		input_dir = input_dir.normalized()
 
-	var dt := delta * 60.0   # normaliza a "frames a 60fps" como Pygame
+	var dt := delta * 60.0
 
 	velocity += input_dir * accel * dt
-	velocity *= pow(FRICTION, dt)           # fricción idéntica a Pygame
+	velocity *= pow(FRICTION, dt)
 
 	var spd_sq := velocity.length_squared()
 	if spd_sq > max_speed * max_speed:
@@ -268,12 +274,11 @@ func get_dash_cooldown_fraction() -> float:
 		return 1.0
 	return 1.0 - clampf(_dash_cd_timer / cd_max, 0.0, 1.0)
 
-# ── Sistema de armas ───────────────────────────────────────────────────
+# ── Sistema de armas ──────────────────────────────────────────────
 
 func _unhandled_key_input(event: InputEvent) -> void:
 	if not is_alive:
 		return
-		
 	if event is InputEventKey and event.pressed and not event.echo:
 		match event.keycode:
 			KEY_1: _switch_weapon(0)
@@ -287,14 +292,11 @@ func _unhandled_key_input(event: InputEvent) -> void:
 func _switch_weapon(index: int) -> void:
 	if index < active_weapons.size():
 		current_weapon_index = index
-		print("Arma actual cambiada al índice: ", current_weapon_index)
 
 func _process_weapons(delta: float) -> void:
-	# Actualizar cooldowns de todas las armas (activas y pasivas)
 	for w in active_weapons:
 		if w.has_method("update_weapon"):
 			w.update_weapon(delta)
-			
 	for pw in passive_weapons:
 		if pw.has_method("update_weapon"):
 			pw.update_weapon(delta)
@@ -304,42 +306,46 @@ func _process_weapons(delta: float) -> void:
 func attack() -> bool:
 	if not is_alive or dash_active or active_weapons.is_empty():
 		return false
-		
 	if current_weapon_index >= active_weapons.size():
 		current_weapon_index = 0
-		
-	var current_weapon = active_weapons[current_weapon_index]
-	if current_weapon.has_method("shoot"):
-		return current_weapon.shoot()
+	var w = active_weapons[current_weapon_index]
+	if w.has_method("shoot"):
+		return w.shoot()
 	return false
 
 func add_weapon(weapon_class_name: String) -> void:
 	if weapon_class_name in unlocked_weapon_names:
 		return
-		
-	unlocked_weapon_names.append(weapon_class_name)
-	
-	# Aquí debes instanciar la escena del arma.
-	# Asume que guardas tus armas en "res://scenes/weapons/"
-	# y que el archivo se llama igual que la clase (ej. PistolWeapon.tscn)
-	var weapon_scene_path = "res://scenes/weapons/" + weapon_class_name + ".tscn"
-	
-	if ResourceLoader.exists(weapon_scene_path):
-		var weapon_instance = load(weapon_scene_path).instantiate()
-		
-		# Agregamos el arma al pivote para que rote con el apuntado del mouse
-		if is_instance_valid(_weapon_pivot):
-			_weapon_pivot.add_child(weapon_instance)
-		
-		# Separar pasivas de activas igual que en Pygame
-		if weapon_class_name in ["NovaWeapon", "OrbitalWeapon", "BoomerangWeapon"]:
-			passive_weapons.append(weapon_instance)
-			print("✅ Habilidad Pasiva desbloqueada: ", weapon_class_name)
-		else:
-			active_weapons.append(weapon_instance)
-			print("✅ Arma desbloqueada: ", weapon_class_name)
+
+	# Buscar el script en la carpeta de armas
+	var path := "res://scenes/weapons/%s.gd" % weapon_class_name
+	if not ResourceLoader.exists(path):
+		# Fallback: intentar en scripts/
+		path = "res://scripts/entities/weapons/%s.gd" % weapon_class_name
+	if not ResourceLoader.exists(path):
+		push_warning("add_weapon: no se encontró %s" % weapon_class_name)
+		return
+
+	var script_res = load(path)
+	var weapon_node := Node2D.new()
+	weapon_node.set_script(script_res)
+	weapon_node.name = weapon_class_name	
+	# Solo asigna el jugador si el arma tiene la variable "owner_player"
+	if "owner_player" in weapon_node:
+		weapon_node.owner_player = self
+
+	if is_instance_valid(_weapon_pivot):
+		_weapon_pivot.add_child(weapon_node)
 	else:
-		print("Error: No se encontró la escena del arma en ", weapon_scene_path)
+		add_child(weapon_node)
+
+	unlocked_weapon_names.append(weapon_class_name)
+
+	var passive_list := ["NovaWeapon", "OrbitalWeapon", "BoomerangWeapon"]
+	if weapon_class_name in passive_list:
+		passive_weapons.append(weapon_node)
+	else:
+		active_weapons.append(weapon_node)
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #  DIBUJO
@@ -351,12 +357,10 @@ func _draw() -> void:
 
 	var half := float(PLAYER_SIZE) * 0.5
 
-	# Parpadeo de invulnerabilidad
 	if _invuln_timer > 0.0 and _damage_flash_timer <= 0.0:
 		if int(_invuln_timer * 60.0) % 6 < 3:
 			return
 
-	# Estela de fantasmas
 	if dash_active and _ghost_positions.size() > 0:
 		var n := _ghost_positions.size()
 		for i in range(n):
@@ -365,28 +369,22 @@ func _draw() -> void:
 			var lpos  : Vector2    = to_local(g["pos"])
 			var gc    : Color      = Color(0.63, 0.0, 1.0, alpha) if ninja_dash \
 								   else Color(1.0, 1.0, 1.0, alpha)
-			draw_rect(Rect2(lpos - Vector2(half, half),
-							Vector2(half * 2.0, half * 2.0)), gc)
+			draw_rect(Rect2(lpos - Vector2(half, half), Vector2(half * 2.0, half * 2.0)), gc)
 			if alpha > 0.196:
 				var ghost_tip := lpos + Vector2(cos(g["angle"]), sin(g["angle"])) * half * 2.5
 				draw_line(lpos, ghost_tip, gc, 2.0)
 
-	# Borde morado (ninja_dash)
 	if ninja_dash and dash_unlocked:
 		draw_rect(Rect2(Vector2(-half - 2.0, -half - 2.0),
-		                Vector2(half * 2.0 + 4.0, half * 2.0 + 4.0)),
-		          Color(0.63, 0.0, 1.0), false, 2.0)
+						Vector2(half * 2.0 + 4.0, half * 2.0 + 4.0)),
+				  Color(0.63, 0.0, 1.0), false, 2.0)
 
-	# Color del cuerpo
 	var body_color := Color.WHITE
 	if _damage_flash_timer > 0.0:
 		var t := _damage_flash_timer / DAMAGE_FLASH_SECS
 		body_color = Color(1.0, 1.0 - t, 1.0 - t)
 
-	# Cuerpo cuadrado blanco
-	draw_rect(Rect2(Vector2(-half, -half),
-	               Vector2(half * 2.0, half * 2.0)), body_color)
+	draw_rect(Rect2(Vector2(-half, -half), Vector2(half * 2.0, half * 2.0)), body_color)
 
-	# Línea de apuntado
 	var tip := Vector2(cos(aim_angle), sin(aim_angle)) * (float(PLAYER_SIZE) * 1.0)
 	draw_line(Vector2.ZERO, tip, body_color, 3.0)

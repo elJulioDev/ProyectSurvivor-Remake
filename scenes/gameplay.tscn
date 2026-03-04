@@ -20,7 +20,7 @@ script = ExtResource("2_ct7aa")
 
 [node name="Enemies" type="Node2D" parent="World" unique_id=1087018824]
 
-[node name="Projectiles" type="Node2D" parent="World" unique_id=1478964526]
+[node name="Projectiles" type="Node2D" parent="World" unique_id=1478964526 groups=["projectiles"]]
 
 [node name="EnemyProjectiles" type="Node2D" parent="World" unique_id=1398668444]
 
