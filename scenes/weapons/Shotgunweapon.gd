@@ -65,12 +65,11 @@ func _apply_physics() -> void:
 		return
 	var angle: float = owner_player.aim_angle
 	
-	# Añadimos la multiplicación por 60.0 para pasarlo a px/s
+	# Retroceso (kickback)
 	owner_player.velocity -= Vector2(cos(angle), sin(angle)) * kickback * 60.0
-	
-	# Cámara shake (si el player expone el método)
-	if owner_player.has_method("add_camera_shake"):
-		owner_player.add_camera_shake(shake_amount)
+	var camera = get_viewport().get_camera_2d()
+	if camera and camera.has_method("add_shake"):
+		camera.add_shake(shake_amount)
 
 # ── Proyectil inline ────────────────────────────────────────────────────────
 func _spawn_projectile(

@@ -45,7 +45,9 @@ func _apply_physics() -> void:
 		
 	if shake_amount > 0:
 		# Lógica para llamar al shake de tu cámara
-		pass
+		var camera = get_viewport().get_camera_2d()
+		if camera and camera.has_method("add_shake"):
+			camera.add_shake(shake_amount)
 
 # Esta función debe ser sobrescrita por cada arma específica (Pistola, Escopeta, etc.)
 func activate() -> bool:

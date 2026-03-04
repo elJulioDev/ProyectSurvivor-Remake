@@ -81,10 +81,11 @@ func _draw() -> void:
 			draw_circle(Vector2.ZERO, (DOT_SIZE + 2.0) * crosshair_scale, COLOR)
 			
 		3: # SNIPER (Ideal para francotirador)
-			var snipe_color = Color(1.0, 0.2, 0.2, 0.9) # Rojo
+			var snipe_color = Color(1.0, 0.2, 0.2, 0.9)
+			var snipecr_color = Color(1.0, 1.0, 1.0, 0.9)
 			draw_circle(Vector2.ZERO, 1.5, snipe_color)
 			# Cruz completa que cruza toda la zona sin separarse
-			draw_line(Vector2(0, -sz * 2), Vector2(0, sz * 2), COLOR, 1.0)
-			draw_line(Vector2(-sz * 2, 0), Vector2(sz * 2, 0), COLOR, 1.0)
+			draw_line(Vector2(0, -sz * 2), Vector2(0, sz * 2), snipecr_color, 1.0)
+			draw_line(Vector2(-sz * 2, 0), Vector2(sz * 2, 0), snipecr_color, 1.0)
 			# Círculo exterior fino
 			draw_arc(Vector2.ZERO, sz * 1.5, 0, TAU, 32, snipe_color, 1.0)

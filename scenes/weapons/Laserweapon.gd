@@ -67,6 +67,10 @@ func _activate() -> bool:
 func _apply_physics() -> void:
 	if owner_player and owner_player.has_method("add_camera_shake"):
 		owner_player.add_camera_shake(shake_amount)
+	
+	var camera = get_viewport().get_camera_2d()
+	if camera and camera.has_method("add_shake"):
+		camera.add_shake(shake_amount)
 
 # ── Render del haz ──────────────────────────────────────────────────────────
 func _draw() -> void:

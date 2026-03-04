@@ -27,6 +27,9 @@ func shoot() -> bool:
 	var angle  : float = player.aim_angle
 
 	_spawn_projectile(angle, 16.0 * sm, int(damage * dm), pen)
+	var camera = get_viewport().get_camera_2d()
+	if camera and camera.has_method("add_shake"):
+		camera.add_shake(2.0)
 	return true
 
 func _spawn_projectile(angle: float, speed: float, dmg: int, pen: int) -> void:
