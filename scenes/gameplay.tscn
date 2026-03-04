@@ -3,6 +3,7 @@
 [ext_resource type="Script" uid="uid://lbco4d7tvpgt" path="res://scenes/gameplay.gd" id="1_l1v76"]
 [ext_resource type="Script" uid="uid://cudqalr7suo7i" path="res://scripts/world/background_layer.gd" id="2_ct7aa"]
 [ext_resource type="PackedScene" uid="uid://j1e488b6hoow" path="res://entities/player.tscn" id="3_ocj2s"]
+[ext_resource type="Script" uid="uid://cbf04560fyyou" path="res://scripts/utils/camera.gd" id="4_ct7aa"]
 
 [node name="Gameplay" type="Node2D" unique_id=1330324624]
 script = ExtResource("1_l1v76")
@@ -25,11 +26,12 @@ script = ExtResource("2_ct7aa")
 [node name="Player" parent="World" unique_id=1871687937 instance=ExtResource("3_ocj2s")]
 
 [node name="Camera2D" type="Camera2D" parent="." unique_id=584623327]
-limit_left = 0
-limit_top = 0
-limit_right = 12000
-limit_bottom = 9000
+limit_left = -1
+limit_top = -1
+limit_right = 11999
+limit_bottom = 8999
 position_smoothing_enabled = true
+script = ExtResource("4_ct7aa")
 
 [node name="HUD" type="CanvasLayer" parent="." unique_id=214702150]
 

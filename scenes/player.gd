@@ -1,219 +1,312 @@
-# scripts/entities/player.gd
 extends CharacterBody2D
-class_name Player
 
-# ── Señales ──────────────────────────────────────────────────────────
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  player.gd — ProyectSurvivor
+#
+#  CORRECCIONES v3:
+#    · Dash: is_action_just_pressed() dentro de _physics_process
+#      (infalible, no puede ser bloqueado por otros nodos)
+#    · dash_unlocked = true por defecto para probar sin upgrade
+#    · Fricción frame-rate independent: velocity *= pow(0.85, dt)
+#    · Dead-zone correcta: 6 px/s (= 0.1 px/frame × 60)
+#
+#  INPUT MAP requerido:
+#    move_up / move_down / move_left / move_right / dash
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 signal died
 signal leveled_up
-signal health_changed(current: int, max_val: int)
-signal xp_changed(current: int, needed: int)
+signal health_changed(current: float, maximum: float)
+signal xp_changed(current: int, next_level: int)
 
-# ── Stats base (equivalente a tu PlayerStats de pygame) ───────────────
-var max_health: int   = 100
-var health: int       = 100
-var max_speed: float  = GameManager.PLAYER_SPEED
-var acceleration: float = GameManager.PLAYER_ACCEL
-var size: int         = GameManager.PLAYER_SIZE
+const PLAYER_SIZE    := 20
+const BASE_MAX_SPEED := 360.0
+const BASE_ACCEL     := 60.0
+const FRICTION       := 0.85
+const SPEED_DEADZONE := 6.0
 
-# XP / nivel
-var xp: int           = 0
-var level: int        = 1
-var xp_to_next: int   = 50       # igual a tu base_xp
-const XP_SCALE: float = 1.35     # tu escala de curva
+const DASH_DURATION_BASE := 12.0 / 60.0
+const DASH_COOLDOWN_BASE := 45.0 / 60.0
+const DASH_SPEED         := 1440.0
+const DASH_BUFFER_SECS   :=  9.0 / 60.0
+const MAX_GHOSTS         := 5
 
-# Invencibilidad post-daño
-var invincible: bool  = false
-var invincible_timer: float = 0.0
-const INVINCIBLE_DURATION: float = 0.8
+const INVULN_BASE_SECS  := 60.0 / 60.0
+const DAMAGE_FLASH_SECS := 15.0 / 60.0
 
-# Dash (desbloqueado por upgrade)
-var dash_unlocked: bool  = false
-var dash_cooldown: float = 0.0
-const DASH_DURATION: float  = 0.18
-const DASH_SPEED: float     = 700.0
-const DASH_COOLDOWN: float  = 1.2
-var _dashing: bool          = false
-var _dash_timer: float      = 0.0
-var _dash_dir: Vector2      = Vector2.ZERO
+# ── Stats ─────────────────────────────────────────────────────────
+var max_speed        : float = BASE_MAX_SPEED
+var accel            : float = BASE_ACCEL
+var max_health       : float = 100.0
+var health           : float = 100.0
+var health_regen     : float = 0.0
+var damage_reduction : float = 0.0
+var invulnerable_mult: float = 1.0
+var emergency_regen  : float = 0.0
+var is_alive         : bool  = true
+var level            : int   = 1
+var experience       : float = 0.0
+var experience_next  : float = 50.0
+var pending_level_ups: int   = 0
+var upgrade_counts   : Dictionary = {}
+var xp_mult          : float = 1.0
+var magnet_range_mult: float = 1.0
+var magnet_speed_mult: float = 1.0
+var xp_on_kill_bonus : int   = 0
+var aura_damage      : float = 0.0
+var aura_radius      : float = 80.0
+var aura_knockback   : float = 0.0
+var aura_knockback_interval: float = 4.0
+var global_damage_mult    : float = 1.0
+var global_cooldown_mult  : float = 1.0
+var projectile_speed_mult : float = 1.0
+var projectile_size_mult  : float = 1.0
+var extra_penetration     : int   = 0
+var knockback_mult        : float = 1.0
+var lifesteal_chance      : float = 0.0
+var lifesteal             : float = 5.0
 
-# Colores del jugador
-const COLOR_BODY   = Color(0.2, 0.5, 1.0)     # azul
-const COLOR_BORDER = Color(0.05, 0.15, 0.5)
-const COLOR_CENTER = Color(0.05, 0.15, 0.5)
+# ── Estado interno ────────────────────────────────────────────────
+var dash_unlocked      : bool  = true   # true para poder probarlo de inmediato
+var dash_active        : bool  = false
+var dash_duration_mult : float = 1.0
+var dash_cooldown_mult : float = 1.0
+var ninja_dash         : bool  = false
 
-# ── Referencias ───────────────────────────────────────────────────────
-@onready var draw_node: Node2D      = $DrawNode
-@onready var health_bar: Node2D     = $HealthBar
-@onready var weapon_pivot: Node2D   = $WeaponPivot
+var _dash_timer        : float   = 0.0
+var _dash_cd_timer     : float   = 0.0
+var _dash_buffer_timer : float   = 0.0
+var _dash_dir          : Vector2 = Vector2.ZERO
+var _ghost_positions   : Array   = []
+var _ninja_hit_ids     : Dictionary = {}
 
-# ── Ciclo de vida ─────────────────────────────────────────────────────
+var aim_angle           : float = 0.0
+var _invuln_timer       : float = 0.0
+var _damage_flash_timer : float = 0.0
+
+@onready var _weapon_pivot: Node2D = get_node_or_null("WeaponPivot")
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  CICLO PRINCIPAL
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 func _ready() -> void:
-	draw_node.draw.connect(_on_draw_node_draw)
-	health_bar.draw.connect(_on_health_bar_draw)
-	# Spawn en centro del mundo
-	position = Vector2(GameManager.WORLD_WIDTH / 2.0, GameManager.WORLD_HEIGHT / 2.0)
-	# La cámara necesita seguirnos — se asigna desde gameplay.gd
-	health_changed.emit(health, max_health)
-
-func _process(delta: float) -> void:
-	_handle_invincibility(delta)
-	_handle_dash_cooldown(delta)
-	draw_node.queue_redraw()
-	health_bar.queue_redraw()
-	# El WeaponPivot apunta al cursor (PC) o a la dirección de movimiento (móvil)
-	_rotate_weapon_pivot()
+	add_to_group("player")
 
 func _physics_process(delta: float) -> void:
-	if _dashing:
-		_process_dash(delta)
-	else:
-		_process_movement(delta)
+	if not is_alive:
+		return
+
+	# Dash: is_action_just_pressed dentro de _physics_process es
+	# la única forma 100% fiable — no puede ser bloqueado por la UI
+	if Input.is_action_just_pressed("dash"):
+		_attempt_dash()
+
+	_update_aim()
+	_update_timers(delta)
+	_handle_movement(delta)
+	_clamp_to_world()
 	move_and_slide()
+	queue_redraw()
 
-# ── Movimiento ────────────────────────────────────────────────────────
-func _process_movement(delta: float) -> void:
-	var dir := _get_input_direction()
+# ── Apuntado ──────────────────────────────────────────────────────
 
-	if dir != Vector2.ZERO:
-		# Aceleración suave — igual a tu lerp en pygame
-		velocity = velocity.move_toward(dir * max_speed, acceleration * delta)
-	else:
-		# Fricción
-		velocity = velocity.move_toward(Vector2.ZERO, acceleration * delta)
+func _update_aim() -> void:
+	aim_angle = (get_global_mouse_position() - global_position).angle()
+	if is_instance_valid(_weapon_pivot):
+		_weapon_pivot.rotation = aim_angle
 
-	# Dash input
-	if Input.is_action_just_pressed("dash") and dash_unlocked and dash_cooldown <= 0.0:
-		_start_dash(dir if dir != Vector2.ZERO else Vector2.RIGHT)
+# ── Timers ────────────────────────────────────────────────────────
 
-func _get_input_direction() -> Vector2:
-	var dir := Vector2.ZERO
-	dir.x = Input.get_axis("move_left", "move_right")
-	dir.y = Input.get_axis("move_up", "move_down")
-	return dir.normalized()
+func _update_timers(delta: float) -> void:
+	if _dash_cd_timer > 0.0:
+		_dash_cd_timer -= delta
+		if _dash_cd_timer <= 0.0:
+			_dash_cd_timer = 0.0
+			if _dash_buffer_timer > 0.0:
+				_execute_dash()
 
-func _process_dash(delta: float) -> void:
-	_dash_timer -= delta
-	velocity = _dash_dir * DASH_SPEED
-	if _dash_timer <= 0.0:
-		_dashing = false
-		invincible = false
+	if _dash_buffer_timer > 0.0:
+		_dash_buffer_timer -= delta
+		if _dash_buffer_timer < 0.0:
+			_dash_buffer_timer = 0.0
 
-func _start_dash(dir: Vector2) -> void:
-	_dashing = true
-	_dash_timer = DASH_DURATION
-	_dash_dir = dir
-	dash_cooldown = DASH_COOLDOWN
-	invincible = true   # invencible durante el dash
+	if dash_active:
+		_dash_timer -= delta
+		if _dash_timer <= 0.0:
+			dash_active = false
+			_ghost_positions.clear()
+			_ninja_hit_ids.clear()
+			velocity = _dash_dir * max_speed * 0.8
 
-func _handle_dash_cooldown(delta: float) -> void:
-	if dash_cooldown > 0.0:
-		dash_cooldown -= delta
+	if _invuln_timer > 0.0:
+		_invuln_timer = maxf(0.0, _invuln_timer - delta)
 
-func _rotate_weapon_pivot() -> void:
-	# PC: apunta al ratón
-	var mouse_pos := get_global_mouse_position()
-	var angle := (mouse_pos - global_position).angle()
-	weapon_pivot.rotation = angle
+	if _damage_flash_timer > 0.0:
+		_damage_flash_timer = maxf(0.0, _damage_flash_timer - delta)
 
-# ── Daño / salud ─────────────────────────────────────────────────────
-func take_damage(amount: int) -> void:
-	if invincible:
+	if health_regen > 0.0 and health < max_health:
+		health = minf(health + health_regen * delta, max_health)
+
+	if emergency_regen > 0.0 and health < max_health * 0.25:
+		health = minf(health + emergency_regen * delta, max_health)
+
+# ── Movimiento ────────────────────────────────────────────────────
+
+func _handle_movement(delta: float) -> void:
+	if dash_active:
+		if _ghost_positions.size() < MAX_GHOSTS:
+			_ghost_positions.append({"pos": global_position, "angle": aim_angle})
+		else:
+			_ghost_positions.pop_front()
+			_ghost_positions.append({"pos": global_position, "angle": aim_angle})
+		velocity = _dash_dir * DASH_SPEED
 		return
-	health -= amount
-	health = max(0, health)
-	health_changed.emit(health, max_health)
-	if health <= 0:
-		_die()
-	else:
-		invincible = true
-		invincible_timer = INVINCIBLE_DURATION
 
-func heal(amount: int) -> void:
-	health = min(health + amount, max_health)
-	health_changed.emit(health, max_health)
+	var input_dir := Vector2.ZERO
+	if Input.is_action_pressed("move_up"):    input_dir.y -= 1.0
+	if Input.is_action_pressed("move_down"):  input_dir.y += 1.0
+	if Input.is_action_pressed("move_left"):  input_dir.x -= 1.0
+	if Input.is_action_pressed("move_right"): input_dir.x += 1.0
 
-func _handle_invincibility(delta: float) -> void:
-	if invincible and not _dashing:
-		invincible_timer -= delta
-		if invincible_timer <= 0.0:
-			invincible = false
+	if input_dir.length_squared() > 1.0:
+		input_dir = input_dir.normalized()
 
-func _die() -> void:
-	died.emit()
-	queue_free()
+	var dt := delta * 60.0   # normaliza a "frames a 60fps" como Pygame
 
-# ── XP / Nivel ────────────────────────────────────────────────────────
-func gain_xp(amount: int) -> void:
-	xp += amount
-	xp_changed.emit(xp, xp_to_next)
-	if xp >= xp_to_next:
-		_level_up()
+	velocity += input_dir * accel * dt
+	velocity *= pow(FRICTION, dt)           # fricción idéntica a Pygame
 
-func _level_up() -> void:
-	xp -= xp_to_next
-	level += 1
-	xp_to_next = int(xp_to_next * XP_SCALE)
-	# Curar un poco al subir de nivel (igual que tu pygame)
-	heal(int(max_health * 0.15))
-	leveled_up.emit()
-	xp_changed.emit(xp, xp_to_next)
+	var spd_sq := velocity.length_squared()
+	if spd_sq > max_speed * max_speed:
+		velocity = velocity.normalized() * max_speed
 
-# ── Aplicar upgrades (llamado desde UpgradeScene) ─────────────────────
-func apply_upgrade(upgrade_id: String) -> void:
-	if not UpgradesData.UPGRADES.has(upgrade_id):
+	if absf(velocity.x) < SPEED_DEADZONE: velocity.x = 0.0
+	if absf(velocity.y) < SPEED_DEADZONE: velocity.y = 0.0
+
+func _clamp_to_world() -> void:
+	var half := float(PLAYER_SIZE) * 0.5
+	global_position.x = clampf(global_position.x, half, GameManager.WORLD_WIDTH - half)
+	global_position.y = clampf(global_position.y, half, GameManager.WORLD_HEIGHT - half)
+
+# ── Dash ──────────────────────────────────────────────────────────
+
+func _attempt_dash() -> void:
+	if not dash_unlocked:
 		return
-	var u: Dictionary = UpgradesData.UPGRADES[upgrade_id]
-	match u["type"]:
-		"unlock":
-			if upgrade_id == "dash":
-				dash_unlocked = true
-		"stat":
-			_apply_stat(u["stat_name"], u["value"])
-		"weapon":
-			# El WeaponManager lo maneja — emite señal o lo procesa gameplay.gd
-			pass  # se expandirá con el sistema de armas
+	if _dash_cd_timer > 0.0:
+		_dash_buffer_timer = DASH_BUFFER_SECS
+		return
+	_execute_dash()
 
-func _apply_stat(stat_name: String, value: float) -> void:
-	match stat_name:
-		"max_speed":   max_speed *= value
-		"max_health":
-			max_health = int(max_health * value)
-			heal(int(max_health * 0.1))
+func _execute_dash() -> void:
+	var input_dir := Vector2.ZERO
+	if Input.is_action_pressed("move_up"):    input_dir.y -= 1.0
+	if Input.is_action_pressed("move_down"):  input_dir.y += 1.0
+	if Input.is_action_pressed("move_left"):  input_dir.x -= 1.0
+	if Input.is_action_pressed("move_right"): input_dir.x += 1.0
 
-# ── Dibujo procedural ─────────────────────────────────────────────────
-func _on_draw_node_draw() -> void:
-	var half := size / 2.0
-	var alpha := 0.4 if (invincible and not _dashing) else 1.0  # parpadeo
-	var body_color := Color(COLOR_BODY.r, COLOR_BODY.g, COLOR_BODY.b, alpha)
+	if input_dir.length_squared() > 0.01:
+		_dash_dir = input_dir.normalized()
+	else:
+		_dash_dir = Vector2(cos(aim_angle), sin(aim_angle))
 
-	# Cuerpo principal
-	var rect := Rect2(Vector2(-half, -half), Vector2(size, size))
-	draw_node.draw_rect(rect, body_color)
-	draw_node.draw_rect(rect, COLOR_BORDER, false, 2)
+	dash_active        = true
+	_dash_timer        = DASH_DURATION_BASE * dash_duration_mult
+	_dash_cd_timer     = DASH_COOLDOWN_BASE * dash_cooldown_mult
+	_dash_buffer_timer = 0.0
+	_ghost_positions.clear()
+	_ninja_hit_ids.clear()
 
-	# Detalle central (equivalente a tu pygame sprite cacheado)
-	var c: int = max(2, int(float(size) / 4.0))
-	draw_node.draw_rect(
-		Rect2(Vector2(-c / 2.0, -c / 2.0), Vector2(c, c)),
-		COLOR_CENTER
-	)
+# ── API pública ───────────────────────────────────────────────────
 
-	# Indicador de dirección de movimiento
-	if velocity.length() > 10.0:
-		var dir := velocity.normalized() * (half + 4)
-		draw_node.draw_circle(dir, 3.0, COLOR_BORDER)
+func take_damage(damage: float) -> void:
+	if not is_alive or _invuln_timer > 0.0 or dash_active:
+		return
+	health -= damage * maxf(0.0, 1.0 - damage_reduction)
+	_damage_flash_timer = DAMAGE_FLASH_SECS
+	_invuln_timer       = INVULN_BASE_SECS * invulnerable_mult
+	emit_signal("health_changed", health, max_health)
+	if health <= 0.0:
+		health   = 0.0
+		is_alive = false
+		emit_signal("died")
 
-func _on_health_bar_draw() -> void:
-	# Barra de vida encima del jugador
-	var bar_w := float(size + 6)
-	var bar_h := 4.0
-	var y_off := -size / 2.0 - 8.0
-	var x_off := -bar_w / 2.0
+func heal(amount: float) -> void:
+	health = minf(health + amount, max_health)
+	emit_signal("health_changed", health, max_health)
 
-	# Fondo
-	health_bar.draw_rect(Rect2(Vector2(x_off, y_off), Vector2(bar_w, bar_h)), Color(0.2, 0.2, 0.2))
-	# Relleno (proporcional)
-	var fill := bar_w * (float(health) / float(max_health))
-	var hp_color := Color(0.1, 0.9, 0.1)  # verde → rojo según salud
-	hp_color = Color(1.0 - (float(health) / float(max_health)), float(health) / float(max_health), 0.1)
-	health_bar.draw_rect(Rect2(Vector2(x_off, y_off), Vector2(fill, bar_h)), hp_color)
+func gain_experience(amount: int) -> bool:
+	if not is_alive:
+		return false
+	var modified := maxi(1, int(float(amount) * xp_mult))
+	experience += float(modified)
+	var leveled := false
+	while experience >= experience_next:
+		experience        -= experience_next
+		level             += 1
+		pending_level_ups += 1
+		experience_next    = int(experience_next * 1.2)
+		leveled            = true
+	if leveled:
+		emit_signal("leveled_up")
+	emit_signal("xp_changed", int(experience), int(experience_next))
+	return leveled
+
+func get_dash_cooldown_fraction() -> float:
+	if not dash_unlocked:
+		return 0.0
+	var cd_max := DASH_COOLDOWN_BASE * dash_cooldown_mult
+	if cd_max <= 0.0:
+		return 1.0
+	return 1.0 - clampf(_dash_cd_timer / cd_max, 0.0, 1.0)
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  DIBUJO
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+func _draw() -> void:
+	if not is_alive:
+		return
+
+	var half := float(PLAYER_SIZE) * 0.5
+
+	# Parpadeo de invulnerabilidad
+	if _invuln_timer > 0.0 and _damage_flash_timer <= 0.0:
+		if int(_invuln_timer * 60.0) % 6 < 3:
+			return
+
+	# Estela de fantasmas
+	if dash_active and _ghost_positions.size() > 0:
+		var n := _ghost_positions.size()
+		for i in range(n):
+			var g     : Dictionary = _ghost_positions[i]
+			var alpha : float      = float(i) / float(max(1, n)) * (180.0 / 255.0)
+			var lpos  : Vector2    = to_local(g["pos"])
+			var gc    : Color      = Color(0.63, 0.0, 1.0, alpha) if ninja_dash \
+								   else Color(1.0, 1.0, 1.0, alpha)
+			draw_rect(Rect2(lpos - Vector2(half, half),
+							Vector2(half * 2.0, half * 2.0)), gc)
+			if alpha > 0.196:
+				var ghost_tip := lpos + Vector2(cos(g["angle"]), sin(g["angle"])) * half * 2.5
+				draw_line(lpos, ghost_tip, gc, 2.0)
+
+	# Borde morado (ninja_dash)
+	if ninja_dash and dash_unlocked:
+		draw_rect(Rect2(Vector2(-half - 2.0, -half - 2.0),
+		                Vector2(half * 2.0 + 4.0, half * 2.0 + 4.0)),
+		          Color(0.63, 0.0, 1.0), false, 2.0)
+
+	# Color del cuerpo
+	var body_color := Color.WHITE
+	if _damage_flash_timer > 0.0:
+		var t := _damage_flash_timer / DAMAGE_FLASH_SECS
+		body_color = Color(1.0, 1.0 - t, 1.0 - t)
+
+	# Cuerpo cuadrado blanco
+	draw_rect(Rect2(Vector2(-half, -half),
+	               Vector2(half * 2.0, half * 2.0)), body_color)
+
+	# Línea de apuntado
+	var tip := Vector2(cos(aim_angle), sin(aim_angle)) * (float(PLAYER_SIZE) * 1.0)
+	draw_line(Vector2.ZERO, tip, body_color, 3.0)

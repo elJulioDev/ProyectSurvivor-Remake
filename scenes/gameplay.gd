@@ -24,13 +24,18 @@ func _ready() -> void:
 
 	player_ref = $World/Player
 	if player_ref:
-		# En Godot 4 se conecta directamente, has_user_signal() no existe
+		# En Godot 4 se conecta directamente
 		player_ref.died.connect(_on_player_died)
 		player_ref.leveled_up.connect(_on_player_leveled_up)
 
-		# La cámara sigue al jugador: reparentamos al Player
-		camera.reparent(player_ref)
-		camera.position = Vector2.ZERO
+		# 1. Mover al jugador al centro de la pantalla inicial
+		player_ref.global_position = Vector2(GameManager.WORLD_WIDTH / 2.0, GameManager.WORLD_HEIGHT / 2.0)
+
+		# 2. Eliminamos camera.reparent(player_ref). Dejamos que camera.gd haga el seguimiento global.
+		# Forzamos un salto instantáneo para centrar la cámara al iniciar el juego.
+		if camera.has_method("snap_to_player"):
+			camera.snap_to_player()
+			
 		camera.make_current()
 
 func _setup_camera() -> void:
@@ -38,8 +43,10 @@ func _setup_camera() -> void:
 	camera.limit_top    = 0
 	camera.limit_right  = GameManager.WORLD_WIDTH
 	camera.limit_bottom = GameManager.WORLD_HEIGHT
-	camera.position_smoothing_enabled = true
-	camera.position_smoothing_speed   = 5.0
+	
+	# 3. Desactivamos el suavizado nativo de Godot para que no pelee 
+	# con la física "lerp_dt" que programaste en camera.gd
+	camera.position_smoothing_enabled = false
 
 func _process(delta: float) -> void:
 	if game_over:
