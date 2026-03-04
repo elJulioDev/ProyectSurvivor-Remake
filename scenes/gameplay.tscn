@@ -4,6 +4,7 @@
 [ext_resource type="Script" uid="uid://cudqalr7suo7i" path="res://scripts/world/background_layer.gd" id="2_ct7aa"]
 [ext_resource type="PackedScene" uid="uid://j1e488b6hoow" path="res://entities/player.tscn" id="3_ocj2s"]
 [ext_resource type="Script" uid="uid://cbf04560fyyou" path="res://scripts/utils/camera.gd" id="4_ct7aa"]
+[ext_resource type="Script" uid="uid://bvc8wnm4tbetm" path="res://scripts/ui/hud.gd" id="5_hud"]
 
 [node name="Gameplay" type="Node2D" unique_id=1330324624]
 script = ExtResource("1_l1v76")
@@ -30,16 +31,18 @@ limit_left = -1
 limit_top = -1
 limit_right = 11999
 limit_bottom = 8999
-position_smoothing_enabled = true
 script = ExtResource("4_ct7aa")
 
 [node name="HUD" type="CanvasLayer" parent="." unique_id=214702150]
 
 [node name="HUDControl" type="Control" parent="HUD" unique_id=1703175734]
 layout_mode = 3
-anchors_preset = 0
-offset_right = 40.0
-offset_bottom = 40.0
-metadata/_edit_use_anchors_ = true
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("5_hud")
 
 [node name="Particles" type="Node2D" parent="." unique_id=1261640654]

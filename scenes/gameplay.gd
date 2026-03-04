@@ -24,18 +24,17 @@ func _ready() -> void:
 
 	player_ref = $World/Player
 	if player_ref:
-		# En Godot 4 se conecta directamente
 		player_ref.died.connect(_on_player_died)
 		player_ref.leveled_up.connect(_on_player_leveled_up)
 
-		# 1. Mover al jugador al centro de la pantalla inicial
-		player_ref.global_position = Vector2(GameManager.WORLD_WIDTH / 2.0, GameManager.WORLD_HEIGHT / 2.0)
+		player_ref.global_position = Vector2(
+			GameManager.WORLD_WIDTH / 2.0,
+			GameManager.WORLD_HEIGHT / 2.0
+		)
 
-		# 2. Eliminamos camera.reparent(player_ref). Dejamos que camera.gd haga el seguimiento global.
-		# Forzamos un salto instantáneo para centrar la cámara al iniciar el juego.
 		if camera.has_method("snap_to_player"):
 			camera.snap_to_player()
-			
+
 		camera.make_current()
 
 func _setup_camera() -> void:
@@ -43,15 +42,25 @@ func _setup_camera() -> void:
 	camera.limit_top    = 0
 	camera.limit_right  = GameManager.WORLD_WIDTH
 	camera.limit_bottom = GameManager.WORLD_HEIGHT
-	
-	# 3. Desactivamos el suavizado nativo de Godot para que no pelee 
-	# con la física "lerp_dt" que programaste en camera.gd
 	camera.position_smoothing_enabled = false
 
 func _process(delta: float) -> void:
 	if game_over:
 		return
+
 	game_time += delta
+	_update_hud()
+
+# ── Actualiza el HUD con los datos del frame ──────────────────────────
+func _update_hud() -> void:
+	if not is_instance_valid(hud):
+		return
+
+	hud.score         = score
+	hud.enemies_alive = enemies_container.get_child_count()
+	hud.wave_time_str = _format_time(game_time)
+
+# ── Callbacks ────────────────────────────────────────────────────────
 
 func _on_player_died() -> void:
 	game_over = true
