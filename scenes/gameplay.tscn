@@ -23,7 +23,6 @@ script = ExtResource("2_ct7aa")
 [node name="EnemyProjectiles" type="Node2D" parent="World" unique_id=1398668444]
 
 [node name="Player" parent="World" unique_id=1871687937 instance=ExtResource("3_ocj2s")]
-script = null
 
 [node name="Camera2D" type="Camera2D" parent="." unique_id=584623327]
 limit_left = 0
