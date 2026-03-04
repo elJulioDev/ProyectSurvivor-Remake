@@ -44,12 +44,33 @@ func _setup_camera() -> void:
 	camera.limit_bottom = GameManager.WORLD_HEIGHT
 	camera.position_smoothing_enabled = false
 
+@onready var spawn_manager: SpawnManager = $SpawnManager
+
 func _process(delta: float) -> void:
 	if game_over:
 		return
 
 	game_time += delta
 	_update_hud()
+	
+	# Asumiendo que player_ref tiene una propiedad `level`, o se la pones
+	var current_level = 1
+	if player_ref and "level" in player_ref:
+		current_level = player_ref.level
+		
+	# Actualizar el Spawner
+	if is_instance_valid(player_ref):
+		var current_enemies = enemies_container.get_child_count()
+		spawn_manager.update_spawner(delta, current_enemies, player_ref.global_position, current_level)
+
+# Manejar cuando un enemigo muere
+func _on_enemy_killed(enemy: Node2D) -> void:
+	score += enemy.points * 100
+	
+	# Instanciar gema de experiencia aquí...
+	# var gem = gem_scene.instantiate()
+	# gems_container.add_child(gem)
+	# gem.global_position = enemy.global_position
 
 # ── Actualiza el HUD con los datos del frame ──────────────────────────
 func _update_hud() -> void:

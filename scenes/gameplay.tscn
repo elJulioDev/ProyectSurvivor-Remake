@@ -6,6 +6,8 @@
 [ext_resource type="Script" uid="uid://cbf04560fyyou" path="res://scripts/utils/camera.gd" id="4_ct7aa"]
 [ext_resource type="Script" uid="uid://bvc8wnm4tbetm" path="res://scripts/ui/hud.gd" id="5_hud"]
 [ext_resource type="Script" uid="uid://c0lmc2e4y7cja" path="res://scripts/utils/crosshair.gd" id="6_din8e"]
+[ext_resource type="Script" uid="uid://bdvhc4dq54saq" path="res://scripts/managers/spawn_manager.gd" id="7_e124b"]
+[ext_resource type="PackedScene" uid="uid://bay3u50k83yo0" path="res://entities/enemy.tscn" id="8_101mb"]
 
 [node name="Gameplay" type="Node2D" unique_id=1330324624]
 script = ExtResource("1_l1v76")
@@ -55,3 +57,7 @@ mouse_filter = 2
 script = ExtResource("6_din8e")
 
 [node name="Particles" type="Node2D" parent="." unique_id=1261640654]
+
+[node name="SpawnManager" type="Node2D" parent="." unique_id=474022568]
+script = ExtResource("7_e124b")
+enemy_scene = ExtResource("8_101mb")
