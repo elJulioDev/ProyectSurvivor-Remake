@@ -2,6 +2,8 @@
 
 [ext_resource type="Script" uid="uid://lbco4d7tvpgt" path="res://scenes/gameplay.gd" id="1_l1v76"]
 [ext_resource type="Script" uid="uid://cudqalr7suo7i" path="res://scripts/world/background_layer.gd" id="2_ct7aa"]
+[ext_resource type="Script" uid="uid://v20cksyl2rbp" path="res://scripts/utils/blood_particle_system.gd" id="2_hbo4f"]
+[ext_resource type="Script" uid="uid://c2iqnack2opr2" path="res://scripts/managers/blood_chunk_manager.gd" id="3_ctvyo"]
 [ext_resource type="PackedScene" uid="uid://j1e488b6hoow" path="res://entities/player.tscn" id="3_ocj2s"]
 [ext_resource type="Script" uid="uid://cbf04560fyyou" path="res://scripts/utils/camera.gd" id="4_ct7aa"]
 [ext_resource type="Script" uid="uid://bvc8wnm4tbetm" path="res://scripts/ui/hud.gd" id="5_hud"]
@@ -16,6 +18,13 @@ script = ExtResource("1_l1v76")
 
 [node name="BackgroundLayer" type="Node2D" parent="World" unique_id=883696639]
 script = ExtResource("2_ct7aa")
+
+[node name="ChunkManager" type="Node2D" parent="World" unique_id=745164545]
+script = ExtResource("3_ctvyo")
+
+[node name="ParticulasSangre" type="Node2D" parent="World" unique_id=365187898 node_paths=PackedStringArray("chunk_manager") groups=["blood_particles"]]
+script = ExtResource("2_hbo4f")
+chunk_manager = NodePath("../ChunkManager")
 
 [node name="FloorDecals" type="Node2D" parent="World" unique_id=80115748]
 

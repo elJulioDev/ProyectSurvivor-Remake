@@ -32,13 +32,15 @@ func _deal_beam_damage(delta: float) -> void:
 		return
 
 	var damage_mult: float  = owner_player.global_damage_mult
-	# 30 × damage_mult × 6 hits/s → DPS equivalente al pygame (30 * 6 = 180 DPS)
 	var dps: float   = damage * damage_mult * 6.0
 	var dmg_this_frame: float = dps * delta
 
 	var angle: float   = owner_player.aim_angle
 	var origin: Vector2 = owner_player.global_position
 	var end: Vector2    = origin + Vector2(cos(angle), sin(angle)) * max_range
+	
+	# MODIFICACIÓN: Calculamos la dirección del rayo láser
+	var hit_dir: Vector2 = Vector2(cos(angle), sin(angle))
 
 	# Comprobar todos los enemigos en el haz (segmento)
 	var enemies := get_tree().get_nodes_in_group("enemies")
@@ -47,7 +49,8 @@ func _deal_beam_damage(delta: float) -> void:
 			continue
 		# Distancia punto-segmento
 		if _point_near_segment(enemy.global_position, origin, end, 20.0):
-			enemy.take_damage(dmg_this_frame)
+			# Pasamos la dirección del láser
+			enemy.take_damage(dmg_this_frame, hit_dir)
 
 # ── Disparo ─────────────────────────────────────────────────────────────────
 func shoot() -> bool:

@@ -84,7 +84,7 @@ class _ProjectileNode extends Node2D:
 			if global_position.distance_to(enemy.global_position) < _radius + 16.0:
 				_enemies_hit.append(enemy)
 				if enemy.has_method("take_damage"):
-					enemy.take_damage(damage)
+					enemy.take_damage(damage, vel.normalized())	
 				pen -= 1
 				if pen <= 0:
 					queue_free()

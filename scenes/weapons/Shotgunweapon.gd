@@ -131,7 +131,7 @@ class _PelletNode:
 			var dist: float = position.distance_to(enemy.global_position)
 			if dist <= radius + 12.0:
 				_enemies_hit.append(enemy)
-				enemy.take_damage(damage)
+				enemy.take_damage(damage, velocity.normalized())
 				if enemy.has_method("apply_knockback"):
 					enemy.apply_knockback(global_position, 8.0)
 				penetration -= 1

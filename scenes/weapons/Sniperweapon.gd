@@ -187,7 +187,7 @@ class _SniperBullet:
 			)
 			if dist_seg <= radius + 14.0:
 				_enemies_hit.append(enemy)
-				enemy.take_damage(damage)
+				enemy.take_damage(damage, velocity.normalized())
 				if enemy.has_method("apply_knockback"):
 					enemy.apply_knockback(global_position, 12.0)
 				penetration -= 1

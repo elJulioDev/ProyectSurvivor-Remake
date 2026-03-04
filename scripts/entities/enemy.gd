@@ -46,6 +46,12 @@ var knockback: Vector2 = Vector2.ZERO
 var speed_variance: float = 1.0
 var _lane: float = 0.0
 
+var bleed_intensity: float = 0.0
+var bleed_decay: float = 0.3
+var bleed_drip_cooldown: float = 0.0
+
+var splatter_cooldown: float = 0.0
+
 @onready var collision_shape: CollisionShape2D = $CollisionShape2D
 
 func _ready() -> void:
@@ -79,6 +85,9 @@ func initialize(pos: Vector2, type: String, speed_multiplier: float, health_mult
 
 func _physics_process(delta: float) -> void:
 	if not is_alive: return
+
+	if splatter_cooldown > 0.0:
+		splatter_cooldown -= delta
 	
 	var player = get_tree().get_first_node_in_group("player")
 	if player:
@@ -101,11 +110,34 @@ func _physics_process(delta: float) -> void:
 			
 	global_position += (velocity + knockback) * delta
 
-func take_damage(amount: float) -> bool:
+	if bleed_intensity > 0:
+		bleed_intensity -= bleed_decay * delta * 60.0
+		if bleed_intensity < 0:
+			bleed_intensity = 0.0
+		else:
+			bleed_drip_cooldown -= delta * 60.0
+			if bleed_drip_cooldown <= 0:
+				var particle_sys = get_tree().get_first_node_in_group("blood_particles")
+				if particle_sys:
+					var delay = max(2.0, 20.0 - (bleed_intensity * 0.8))
+					particle_sys.create_blood_drip(global_position, bleed_intensity)
+					bleed_drip_cooldown = delay
+
+func take_damage(amount: float, hit_dir: Vector2 = Vector2.ZERO) -> bool:
 	if not is_alive: return false
 	
 	health -= amount
-	queue_redraw() # Actualizar barra de vida
+	bleed_intensity = min(40.0, bleed_intensity + amount)
+	
+	if splatter_cooldown <= 0.0:
+		var particle_sys = get_tree().get_first_node_in_group("blood_particles")
+		if particle_sys:
+			# Llamamos al splatter, pero con menos fuerza y cantidad (ej: count de 3)
+			particle_sys.create_blood_splatter(global_position, hit_dir, 1.0, 3)
+		# Darle un cooldown de 0.15 segundos antes de poder salpicar de nuevo
+		splatter_cooldown = 0.15
+		
+	queue_redraw() 
 	
 	if health <= 0:
 		health = 0
@@ -113,24 +145,25 @@ func take_damage(amount: float) -> bool:
 		return true
 	return false
 
-func apply_knockback(source_pos: Vector2, force: float) -> void:
-	var dir = source_pos.direction_to(global_position)
-	var size_factor = 1.0 / TYPES[enemy_type]["size_mult"]
-	knockback = dir * force * size_factor
-
 func die() -> void:
 	is_alive = false
-	# Desactivamos colisones
 	set_deferred("monitoring", false)
 	set_deferred("monitorable", false)
 	
-	# Emitir señal o notificar al mundo
+	var particle_sys = get_tree().get_first_node_in_group("blood_particles")
+	if particle_sys:
+		particle_sys.create_viscera_explosion(global_position)
+	
 	var gameplay = get_tree().current_scene
 	if gameplay.has_method("_on_enemy_killed"):
 		gameplay._on_enemy_killed(self)
 		
-	# Podríamos usar object pooling, pero en Godot hacer queue_free y que el spawner cree nuevos es suficientemente rápido
 	queue_free()
+
+func apply_knockback(source_pos: Vector2, force: float) -> void:
+	var dir = source_pos.direction_to(global_position)
+	var size_factor = 1.0 / TYPES[enemy_type]["size_mult"]
+	knockback = dir * force * size_factor
 
 func _draw() -> void:
 	# Dibujo estilo rectángulos de tu código original

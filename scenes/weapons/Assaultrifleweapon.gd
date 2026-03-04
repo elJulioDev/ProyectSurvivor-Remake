@@ -131,7 +131,7 @@ class _BulletNode:
 				continue
 			if position.distance_to(enemy.global_position) <= radius + 12.0:
 				_enemies_hit.append(enemy)
-				enemy.take_damage(damage)
+				enemy.take_damage(damage, velocity.normalized())
 				if enemy.has_method("apply_knockback"):
 					enemy.apply_knockback(global_position, 8.0)
 				penetration -= 1

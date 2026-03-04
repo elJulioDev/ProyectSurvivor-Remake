@@ -79,7 +79,8 @@ func _check_hits() -> void:
 			var dy: float = enemy.global_position.y - orb_pos.y
 			if dx * dx + dy * dy <= hit_r_sq:
 				_hit_cd[eid] = hit_cooldown_max
-				enemy.take_damage(final_dmg)
+				var hit_dir: Vector2 = (enemy.global_position - orb_pos).normalized()
+				enemy.take_damage(final_dmg, hit_dir)
 				if enemy.has_method("apply_knockback"):
 					enemy.apply_knockback(orb_pos, 9.0 * kb_mult)
 
