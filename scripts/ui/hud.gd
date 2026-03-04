@@ -24,6 +24,7 @@ const C_BORDER     := Color(0.176, 0.176, 0.255, 1.0)
 const C_BORDER_LIT := Color(0.314, 0.314, 0.431, 1.0)
 const C_WHITE      := Color(0.922, 0.922, 0.961, 1.0)
 const C_GRAY       := Color(0.431, 0.431, 0.510, 1.0)
+const C_RED        := Color(0.824, 0.314, 0.235, 1.0)
 const C_DIM        := Color(0.216, 0.216, 0.275, 1.0)
 const C_HP_HIGH    := Color(0.180, 0.800, 0.443, 1.0)
 const C_HP_MID     := Color(0.945, 0.769, 0.059, 1.0)
@@ -213,7 +214,7 @@ func _draw_health_panel() -> void:
 	const PX := 16.0
 	const PY := 28.0
 	const PW := 310.0
-	const PH := 68.0
+	const PH := 83.0
 
 	_panel(PX, PY, PW, PH, C_BG_PANEL, C_BORDER)
 
@@ -223,7 +224,7 @@ func _draw_health_panel() -> void:
 
 	# ── Ícono de cruz (pulsante) ───────────────────────────────────
 	var icon_cx := PX + 22.0
-	var icon_cy := PY + 22.0
+	var icon_cy := PY + 28.0
 	var pulse   := (sin(_hp_pulse) * 0.5 + 0.5) * (0.15 + (1.0 - hp_pct) * 0.45)
 	var arm     := 9.0 * (1.0 + pulse)
 	var thick   := maxf(3.0, 5.0 * (1.0 + pulse * 0.3))
@@ -234,7 +235,7 @@ func _draw_health_panel() -> void:
 
 	# ── Barras de HP ───────────────────────────────────────────────
 	const BX := PX + 42.0
-	const BY := PY + 12.0
+	const BY := PY + 19.0
 	const BW := PW - 55.0
 	const BH := 20.0
 
@@ -254,7 +255,7 @@ func _draw_health_panel() -> void:
 	_text_center(hp_str, Vector2(BX + BW * 0.5, BY + BH * 0.5), FS_TINY, C_GRAY)
 
 	# Etiqueta SALUD
-	_text("SALUD", Vector2(BX, BY - 14.0), FS_TINY, C_DIM)
+	_text("SALUD", Vector2(BX, BY - 20.0), FS_TINY, C_DIM)
 
 	# ── Barra de Dash ─────────────────────────────────────────────
 	var dash_y   := BY + BH + 8.0
@@ -290,7 +291,7 @@ func _draw_health_panel() -> void:
 
 func _draw_score_panel() -> void:
 	const PW := 220.0
-	const PH := 68.0
+	const PH := 83.0
 	const PY := 28.0
 	var   px := size.x - PW - 16.0
 
@@ -299,7 +300,7 @@ func _draw_score_panel() -> void:
 	# Score (contador animado)
 	var sc_str := _fmt_score(int(_score_display))
 	var sc_w   := _str_w(sc_str, FS_LARGE)
-	_text(sc_str, Vector2(px + PW - sc_w - 12.0, PY + 8.0), FS_LARGE, C_SCORE)
+	_text(sc_str, Vector2(px + PW - sc_w - 12.0, PY), FS_LARGE, C_SCORE)
 
 	# Separador
 	var sep_y := PY + PH * 0.5 + 4.0
@@ -307,7 +308,7 @@ func _draw_score_panel() -> void:
 			  Vector2(px + PW - 10.0, sep_y), C_BORDER, 1.0)
 
 	# Contador de enemigos
-	var en_col := C_ENEMIES if enemies_alive > 0 else C_GRAY
+	var en_col := C_ENEMIES if enemies_alive > 0 else C_RED
 	var en_str := "%d ENEMIGOS" % enemies_alive
 	var en_w   := _str_w(en_str, FS_SMALL)
 	_text(en_str, Vector2(px + PW - en_w - 12.0, sep_y + 6.0), FS_SMALL, en_col)
