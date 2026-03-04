@@ -1,6 +1,9 @@
 extends Node2D
 class_name WeaponBase
 
+enum CrosshairType { CROSS, CIRCLE, DOT, SNIPER }
+@export var crosshair_type: CrosshairType = CrosshairType.CROSS
+
 @export var cooldown: float = 60.0 # En frames o adaptado a segundos (cooldown / 60.0)
 @export var damage: float = 10.0
 @export var kickback: float = 0.0
