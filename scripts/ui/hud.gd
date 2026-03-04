@@ -283,7 +283,7 @@ func _draw_health_panel() -> void:
 		dash_lbl = "DASH — LISTO"
 		dash_col = C_DASH_READY
 	else:
-		dash_lbl = "DASH  recargando…"
+		dash_lbl = "DASH — RECARGANDO…"
 		dash_col = C_DIM
 	_text(dash_lbl, Vector2(BX, dash_y + 11.0), FS_TINY, dash_col)
 

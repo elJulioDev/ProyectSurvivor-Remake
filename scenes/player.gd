@@ -86,6 +86,12 @@ var _damage_flash_timer : float = 0.0
 
 @onready var _weapon_pivot: Node2D = get_node_or_null("WeaponPivot")
 
+# ── Sistema de Armas ──────────────────────────────────────────────
+var active_weapons: Array[Node2D] = []
+var passive_weapons: Array[Node2D] = []
+var unlocked_weapon_names: Array[String] = ["PistolWeapon"] # Arma inicial
+var current_weapon_index: int = 0
+
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #  CICLO PRINCIPAL
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -107,6 +113,7 @@ func _physics_process(delta: float) -> void:
 	_handle_movement(delta)
 	_clamp_to_world()
 	move_and_slide()
+	_process_weapons(delta)
 	queue_redraw()
 
 # ── Apuntado ──────────────────────────────────────────────────────
@@ -260,6 +267,79 @@ func get_dash_cooldown_fraction() -> float:
 	if cd_max <= 0.0:
 		return 1.0
 	return 1.0 - clampf(_dash_cd_timer / cd_max, 0.0, 1.0)
+
+# ── Sistema de armas ───────────────────────────────────────────────────
+
+func _unhandled_key_input(event: InputEvent) -> void:
+	if not is_alive:
+		return
+		
+	if event is InputEventKey and event.pressed and not event.echo:
+		match event.keycode:
+			KEY_1: _switch_weapon(0)
+			KEY_2: _switch_weapon(1)
+			KEY_3: _switch_weapon(2)
+			KEY_4: _switch_weapon(3)
+			KEY_5: _switch_weapon(4)
+			KEY_6: _switch_weapon(5)
+			KEY_7: _switch_weapon(6)
+
+func _switch_weapon(index: int) -> void:
+	if index < active_weapons.size():
+		current_weapon_index = index
+		print("Arma actual cambiada al índice: ", current_weapon_index)
+
+func _process_weapons(delta: float) -> void:
+	# Actualizar cooldowns de todas las armas (activas y pasivas)
+	for w in active_weapons:
+		if w.has_method("update_weapon"):
+			w.update_weapon(delta)
+			
+	for pw in passive_weapons:
+		if pw.has_method("update_weapon"):
+			pw.update_weapon(delta)
+		if pw.has_method("auto_shoot"):
+			pw.auto_shoot(delta)
+
+func attack() -> bool:
+	if not is_alive or dash_active or active_weapons.is_empty():
+		return false
+		
+	if current_weapon_index >= active_weapons.size():
+		current_weapon_index = 0
+		
+	var current_weapon = active_weapons[current_weapon_index]
+	if current_weapon.has_method("shoot"):
+		return current_weapon.shoot()
+	return false
+
+func add_weapon(weapon_class_name: String) -> void:
+	if weapon_class_name in unlocked_weapon_names:
+		return
+		
+	unlocked_weapon_names.append(weapon_class_name)
+	
+	# Aquí debes instanciar la escena del arma.
+	# Asume que guardas tus armas en "res://scenes/weapons/"
+	# y que el archivo se llama igual que la clase (ej. PistolWeapon.tscn)
+	var weapon_scene_path = "res://scenes/weapons/" + weapon_class_name + ".tscn"
+	
+	if ResourceLoader.exists(weapon_scene_path):
+		var weapon_instance = load(weapon_scene_path).instantiate()
+		
+		# Agregamos el arma al pivote para que rote con el apuntado del mouse
+		if is_instance_valid(_weapon_pivot):
+			_weapon_pivot.add_child(weapon_instance)
+		
+		# Separar pasivas de activas igual que en Pygame
+		if weapon_class_name in ["NovaWeapon", "OrbitalWeapon", "BoomerangWeapon"]:
+			passive_weapons.append(weapon_instance)
+			print("✅ Habilidad Pasiva desbloqueada: ", weapon_class_name)
+		else:
+			active_weapons.append(weapon_instance)
+			print("✅ Arma desbloqueada: ", weapon_class_name)
+	else:
+		print("Error: No se encontró la escena del arma en ", weapon_scene_path)
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #  DIBUJO
