@@ -53,8 +53,9 @@ func _apply_physics() -> void:
 	if owner_player == null: return
 	var angle: float = owner_player.aim_angle
 	owner_player.velocity -= Vector2(cos(angle), sin(angle)) * kickback * 60.0
-	if owner_player.has_method("add_camera_shake"):
-		owner_player.add_camera_shake(shake_amount)
+	var camera := get_viewport().get_camera_2d()
+	if camera and camera.has_method("add_shake"):
+		camera.add_shake(shake_amount)
 
 func _draw() -> void:
 	if owner_player == null: return

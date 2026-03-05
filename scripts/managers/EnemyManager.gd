@@ -49,6 +49,9 @@ var _type    := PackedByteArray()      # índice en TYPE_* arrays
 var _pts     := PackedInt32Array()     # puntos al morir
 var _dmg_inv := PackedFloat32Array()   # invulnerabilidad temporal tras daño
 var _flash   := PackedFloat32Array()   # Temporizador de destello blanco
+var _splatter_cd := PackedFloat32Array()   # Cooldown de salpicadura de sangre
+var _bleed_int   := PackedFloat32Array()   # Intensidad del sangrado
+var _bleed_cd    := PackedFloat32Array()   # Cooldown de cada gota
 
 var _count   : int = 0   # enemigos activos en este frame
 
@@ -91,6 +94,12 @@ func _alloc_arrays() -> void:
 	_dmg_inv.fill(0)
 	_flash.fill(0)
 	_flash.resize(n)
+	_splatter_cd.resize(n)
+	_splatter_cd.fill(0)
+	_bleed_int.resize(n)
+	_bleed_cd.resize(n)
+	_bleed_int.fill(0)
+	_bleed_cd.fill(0)
 
 func _build_multimesh() -> void:
 	# Quad 1×1 blanco — escalamos vía Transform2D por instancia
@@ -117,7 +126,6 @@ func _build_multimesh() -> void:
 	img.fill(Color.WHITE)
 	_mmi.texture = ImageTexture.create_from_image(img)
 
-	# --- NUEVO CÓDIGO: SHADER PARA RECUPERAR EL ESTILO VISUAL ---
 	var mat = ShaderMaterial.new()
 	mat.shader = Shader.new()
 	mat.shader.code = """
@@ -172,6 +180,10 @@ func spawn(pos: Vector2, type_name: String,
 	_alive[idx] = 1;      _type[idx]  = ti
 	_pts[idx]   = TYPE_POINTS[ti]
 	_dmg_inv[idx] = 0.0
+	_flash[idx]       = 0.0
+	_splatter_cd[idx] = 0.0
+	_bleed_int[idx]   = 0.0
+	_bleed_cd[idx]    = 0.0
 	_count += 1
 	return idx
 
@@ -185,6 +197,21 @@ func take_damage(idx: int, amount: float,
 
 	_hp[idx] -= amount
 	_flash[idx] = 0.166
+
+	_bleed_int[idx] = minf(40.0, _bleed_int[idx] + amount)
+
+	# Salpicadura de sangre
+	if _splatter_cd[idx] <= 0.0:
+		if not is_instance_valid(_blood_sys):
+			_blood_sys = get_tree().get_first_node_in_group("blood_particles")
+		
+		if is_instance_valid(_blood_sys):
+			var dmg_ratio := clampf(amount / maxf(_maxhp[idx], 1.0) * 6.0, 0.0, 1.0)
+			var pos := Vector2(_px[idx], _py[idx])
+			# Llama a tu función original: pos, dir, scale, count, dmg_ratio
+			_blood_sys.create_blood_splatter(pos, hit_dir, 1.2, 8, dmg_ratio)
+		
+		_splatter_cd[idx] = 0.12 # Cooldown de 0.12s (igual que en tu script antiguo)
 
 	# Kickback proporcional al tipo
 	if hit_dir != Vector2.ZERO:
@@ -312,6 +339,25 @@ func _run_logic(delta: float) -> void:
 		# ── Destello de impacto ──────────────────────────────
 		if _flash[i] > 0.0:
 			_flash[i] = maxf(0.0, _flash[i] - delta)
+			
+        # ── Cooldown de salpicadura ──────────────────────────
+		if _splatter_cd[i] > 0.0:
+			_splatter_cd[i] = maxf(0.0, _splatter_cd[i] - delta)
+
+		# ── Goteo de sangre continuo (NUEVO) ─────────────────
+		if _bleed_int[i] > 0.0:
+			# dt ya equivale a delta * 60.0, decae 0.3 unidades por frame
+			_bleed_int[i] = maxf(0.0, _bleed_int[i] - 0.3 * dt)
+			
+			if _bleed_int[i] > 0.0:
+				_bleed_cd[i] -= dt
+				if _bleed_cd[i] <= 0.0:
+					if is_instance_valid(_blood_sys):
+						var pos := Vector2(_px[i], _py[i])
+						_blood_sys.create_blood_drip(pos, _bleed_int[i])
+					
+					# Reiniciar el delay de la próxima gota (depende de la intensidad)
+					_bleed_cd[i] = maxf(2.0, 20.0 - _bleed_int[i] * 0.8)
 
 		# ── Mover ────────────────────────────────────────────
 		_px[i] = cx + (_vx[i] + _kx[i]) * delta

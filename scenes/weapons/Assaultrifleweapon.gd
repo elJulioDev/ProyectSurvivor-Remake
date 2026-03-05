@@ -2,6 +2,7 @@
 class_name AssaultRifleWeapon
 extends Node2D
 
+var crosshair_type: int     = 4
 var cooldown: float         = 8.0
 var current_cooldown: float = 0.0
 var damage: float           = 20.0
