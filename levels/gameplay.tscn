@@ -1,30 +1,30 @@
 [gd_scene format=3 uid="uid://daig871mpycsa"]
 
-[ext_resource type="Script" uid="uid://lbco4d7tvpgt" path="res://scenes/gameplay.gd" id="1_l1v76"]
-[ext_resource type="Script" uid="uid://cudqalr7suo7i" path="res://scripts/world/background_layer.gd" id="2_ct7aa"]
-[ext_resource type="PackedScene" uid="uid://j1e488b6hoow" path="res://entities/player.tscn" id="3_ocj2s"]
-[ext_resource type="Script" uid="uid://cbf04560fyyou" path="res://scripts/utils/camera.gd" id="4_ct7aa"]
-[ext_resource type="Script" uid="uid://v20cksyl2rbp" path="res://scripts/utils/blood_particle_system.gd" id="4_hbo4f"]
-[ext_resource type="Script" uid="uid://c2iqnack2opr2" path="res://scripts/managers/blood_chunk_manager.gd" id="5_ctvyo"]
-[ext_resource type="Script" uid="uid://bvc8wnm4tbetm" path="res://scripts/ui/hud.gd" id="5_hud"]
-[ext_resource type="Script" uid="uid://c0lmc2e4y7cja" path="res://scripts/utils/crosshair.gd" id="6_din8e"]
-[ext_resource type="Script" uid="uid://bdvhc4dq54saq" path="res://scripts/managers/spawn_manager.gd" id="7_e124b"]
-[ext_resource type="Script" uid="uid://u6ogjnwe8y1q" path="res://scripts/managers/EnemyManager.gd" id="10_hbo4f"]
+[ext_resource type="Script" uid="uid://lbco4d7tvpgt" path="res://levels/gameplay.gd" id="1_6p5th"]
+[ext_resource type="Script" uid="uid://cudqalr7suo7i" path="res://levels/world/background_layer.gd" id="2_rokjk"]
+[ext_resource type="Script" uid="uid://v20cksyl2rbp" path="res://core/utils/blood_particle_system.gd" id="3_2i4lx"]
+[ext_resource type="Script" uid="uid://c2iqnack2opr2" path="res://core/managers/blood_chunk_manager.gd" id="4_jdxhe"]
+[ext_resource type="PackedScene" uid="uid://j1e488b6hoow" path="res://entities/player/player.tscn" id="5_876sc"]
+[ext_resource type="Script" uid="uid://cbf04560fyyou" path="res://core/utils/camera.gd" id="6_jv18n"]
+[ext_resource type="Script" uid="uid://bvc8wnm4tbetm" path="res://ui/hud/hud.gd" id="7_h725n"]
+[ext_resource type="Script" uid="uid://c0lmc2e4y7cja" path="res://ui/hud/crosshair.gd" id="8_c5pgr"]
+[ext_resource type="Script" uid="uid://u6ogjnwe8y1q" path="res://core/managers/EnemyManager.gd" id="9_rgnag"]
+[ext_resource type="Script" uid="uid://bdvhc4dq54saq" path="res://core/managers/spawn_manager.gd" id="10_ooudo"]
 
 [node name="Gameplay" type="Node2D" unique_id=1330324624]
-script = ExtResource("1_l1v76")
+script = ExtResource("1_6p5th")
 
 [node name="World" type="Node2D" parent="." unique_id=1752792137]
 
 [node name="BackgroundLayer" type="Node2D" parent="World" unique_id=883696639]
-script = ExtResource("2_ct7aa")
+script = ExtResource("2_rokjk")
 
 [node name="ParticulasSangre" type="Node2D" parent="World" unique_id=1967974892 node_paths=PackedStringArray("chunk_manager")]
-script = ExtResource("4_hbo4f")
+script = ExtResource("3_2i4lx")
 chunk_manager = NodePath("../BloodManagerSangre")
 
 [node name="BloodManagerSangre" type="Node2D" parent="World" unique_id=1406385229]
-script = ExtResource("5_ctvyo")
+script = ExtResource("4_jdxhe")
 
 [node name="FloorDecals" type="Node2D" parent="World" unique_id=80115748]
 
@@ -36,14 +36,14 @@ script = ExtResource("5_ctvyo")
 
 [node name="EnemyProjectiles" type="Node2D" parent="World" unique_id=1398668444]
 
-[node name="Player" parent="World" unique_id=1871687937 instance=ExtResource("3_ocj2s")]
+[node name="Player" parent="World" unique_id=1871687937 instance=ExtResource("5_876sc")]
 
 [node name="Camera2D" type="Camera2D" parent="." unique_id=584623327]
 limit_left = -1
 limit_top = -1
 limit_right = 11999
 limit_bottom = 8999
-script = ExtResource("4_ct7aa")
+script = ExtResource("6_jv18n")
 
 [node name="HUD" type="CanvasLayer" parent="." unique_id=214702150]
 
@@ -55,7 +55,7 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
-script = ExtResource("5_hud")
+script = ExtResource("7_h725n")
 
 [node name="Crosshair" type="Control" parent="HUD" unique_id=1883081703]
 layout_mode = 3
@@ -63,12 +63,13 @@ anchors_preset = 0
 offset_right = 40.0
 offset_bottom = 40.0
 mouse_filter = 2
-script = ExtResource("6_din8e")
+script = ExtResource("8_c5pgr")
+metadata/_edit_use_anchors_ = true
 
 [node name="Particles" type="Node2D" parent="." unique_id=1261640654]
 
 [node name="EnemyManager" type="Node2D" parent="." unique_id=1549364374]
-script = ExtResource("10_hbo4f")
+script = ExtResource("9_rgnag")
 
 [node name="SpawnManager" type="Node2D" parent="." unique_id=1107055362]
-script = ExtResource("7_e124b")
+script = ExtResource("10_ooudo")

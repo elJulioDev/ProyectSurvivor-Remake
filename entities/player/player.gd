@@ -318,12 +318,9 @@ func add_weapon(weapon_class_name: String) -> void:
 		return
 
 	# Buscar el script en la carpeta de armas
-	var path := "res://scenes/weapons/%s.gd" % weapon_class_name
+	var path := "res://entities/weapons/%s.gd" % weapon_class_name
 	if not ResourceLoader.exists(path):
-		# Fallback: intentar en scripts/
-		path = "res://scripts/entities/weapons/%s.gd" % weapon_class_name
-	if not ResourceLoader.exists(path):
-		push_warning("add_weapon: no se encontró %s" % weapon_class_name)
+		push_warning("add_weapon: no se encontró %s en la ruta %s" % [weapon_class_name, path])
 		return
 
 	var script_res = load(path)
