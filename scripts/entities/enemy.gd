@@ -26,6 +26,10 @@ var knockback:       Vector2 = Vector2.ZERO
 var speed_variance:  float   = 1.0
 var _lane:           float   = 0.0
 
+# ── Hit flash ────────────────────────────────────────────────────────────────
+var _hit_flash_timer:     float = 0.0
+const HIT_FLASH_DURATION: float = 0.166   # segundos que dura el destello blanco
+
 # ── Sistema de sangre ────────────────────────────────────────────────────────
 var bleed_intensity:      float = 0.0
 var bleed_decay:          float = 0.3
@@ -33,7 +37,6 @@ var bleed_drip_cooldown:  float = 0.0
 var splatter_cooldown:    float = 0.0
 
 ## Nivel de mancha acumulada en el cuerpo (0=limpio, 1=empapado)
-## Sube con cada golpe y nunca baja — el enemigo queda más sangriento con la batalla.
 var blood_stain:          float = 0.0
 
 ## Posiciones pre-calculadas de manchas en el cuerpo (espacio local, normalizadas)
@@ -78,6 +81,13 @@ func _physics_process(delta: float) -> void:
 	if splatter_cooldown > 0.0:
 		splatter_cooldown -= delta
 
+	# Decrementar hit flash
+	if _hit_flash_timer > 0.0:
+		_hit_flash_timer -= delta
+		if _hit_flash_timer < 0.0:
+			_hit_flash_timer = 0.0
+		queue_redraw()
+
 	var player = get_tree().get_first_node_in_group("player")
 	if player:
 		var dir          := global_position.direction_to(player.global_position)
@@ -112,6 +122,9 @@ func take_damage(amount: float, hit_dir: Vector2 = Vector2.ZERO) -> bool:
 
 	health -= amount
 
+	# Activar destello blanco de impacto
+	_hit_flash_timer = HIT_FLASH_DURATION
+
 	# Intensidad proporcional al daño relativo (0-1)
 	var dmg_ratio := clampf(amount / maxf(max_health, 1.0) * 6.0, 0.0, 1.0)
 
@@ -139,13 +152,10 @@ func take_damage(amount: float, hit_dir: Vector2 = Vector2.ZERO) -> bool:
 
 ## Añade una mancha de sangre en el cuerpo del enemigo en dirección al impacto.
 func _add_body_stain(hit_dir: Vector2, dmg_ratio: float) -> void:
-	# Acumular nivel de mancha global
 	blood_stain = minf(1.0, blood_stain + dmg_ratio * 0.35)
 
-	# Añadir posición de mancha localizada (máx 12 manchas para no saturar el draw)
 	if _body_stains.size() < 12 and dmg_ratio > 0.1:
-		var half := 0.4  # rango normalizado dentro del sprite
-		# Posición semi-aleatoria sesgada hacia el lado del impacto
+		var half := 0.4
 		var offset := Vector2(randf_range(-half, half), randf_range(-half, half))
 		if hit_dir != Vector2.ZERO:
 			offset = offset.lerp(hit_dir.normalized() * half * 0.5, 0.4)
@@ -156,7 +166,6 @@ func die() -> void:
 	set_deferred("monitoring",  false)
 	set_deferred("monitorable", false)
 
-	# Escalar la explosión con el tamaño del enemigo
 	var size_mult: float = TYPES[enemy_type]["size_mult"] as float
 	var particle_sys = get_tree().get_first_node_in_group("blood_particles")
 	if particle_sys:
@@ -169,12 +178,21 @@ func die() -> void:
 	queue_free()
 
 func apply_knockback(source_pos: Vector2, force: float) -> void:
-	var dir         := source_pos.direction_to(global_position)
-	var size_factor : float = 1.0 / TYPES[enemy_type]["size_mult"]
-	knockback        = dir * force * size_factor
+	var dir          := source_pos.direction_to(global_position)
+	var size_factor  : float = 1.0 / TYPES[enemy_type]["size_mult"]
+	
+	# Multiplicamos por 60 para convertir de unidades/frame a px/s,
+	# Cambiamos '=' por '+=' para acumular los empujes en lugar de sobrescribirlos
+	knockback += dir * force * size_factor * 60.0
+	
+	# Limitar el knockback máximo para evitar que el enemigo salga disparado a la velocidad de la luz
+	# (Ajusta el 1500.0 según lo sientas mejor en tu gameplay)
+	var max_knockback: float = 1500.0
+	if knockback.length() > max_knockback:
+		knockback = knockback.limit_length(max_knockback)
 
 # ════════════════════════════════════════════════════════════════════════════
-#  DIBUJO — cuerpo + barra de vida + manchas de sangre
+#  DIBUJO — cuerpo + barra de vida + manchas de sangre + hit flash
 # ════════════════════════════════════════════════════════════════════════════
 func _draw() -> void:
 	var half := size * 0.5
@@ -190,26 +208,14 @@ func _draw() -> void:
 	var ch   := cs * 0.5
 	draw_rect(Rect2(-ch, -ch, cs, cs), border_color)
 
-	# ── Manchas de sangre en el cuerpo ──────────────────────────────────────
-	if blood_stain > 0.0 and _body_stains.size() > 0:
-		for stain_data in _body_stains:
-			var local_off: Vector2 = stain_data["local"]
-			var ratio:     float   = stain_data["r"]
-			# Radio de la mancha proporcional al daño y al tamaño del enemigo
-			var stain_r := maxf(2.0, size * 0.18 * ratio * (1.0 + blood_stain))
-			var stain_pos := local_off * size
-			# Capa exterior oscura (costra de sangre seca)
-			draw_rect(Rect2(stain_pos - Vector2(stain_r, stain_r), Vector2(stain_r * 2, stain_r * 2)),
-				Color(0.28, 0.0, 0.0, minf(0.85, blood_stain * 0.9)))
-			# Núcleo brillante (sangre fresca)
-			if ratio > 0.3:
-				draw_rect(Rect2(stain_pos - Vector2(stain_r * 0.5, stain_r * 0.5), Vector2(stain_r, stain_r)),
-					Color(0.65, 0.04, 0.04, minf(0.9, blood_stain)))
-
-	# Overlay de sangre global cuando el enemigo está muy dañado
-	if blood_stain > 0.4:
-		var alpha := (blood_stain - 0.4) / 0.6 * 0.30
-		draw_rect(rect, Color(0.35, 0.0, 0.0, alpha))
+	# ── Hit flash blanco (encima de todo excepto la barra de vida) ───────────
+	if _hit_flash_timer > 0.0:
+		var flash_progress := _hit_flash_timer / HIT_FLASH_DURATION
+		# Pulso que arranca opaco y se desvanece rápido
+		var flash_alpha := flash_progress * 0.92
+		draw_rect(rect, Color(1.0, 1.0, 1.0, flash_alpha))
+		# Borde brillante extra para que el impacto sea más visible
+		draw_rect(rect, Color(1.0, 1.0, 1.0, flash_progress * 0.6), false, 3.0)
 
 	# ── Barra de vida ────────────────────────────────────────────────────────
 	if health < max_health:
