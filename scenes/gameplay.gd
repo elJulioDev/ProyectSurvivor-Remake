@@ -88,9 +88,12 @@ func _on_enemy_killed(pos: Vector2, points: int) -> void:
 		if gem.has_method("setup"):
 			gem.setup(1)
 
-	# XP al jugador
-	if is_instance_valid(player_ref) and player_ref.has_method("gain_experience"):
-		player_ref.gain_experience(points)
+	# --- LÍNEAS ELIMINADAS ---
+	# El código de abajo causaba que la barra subiera instantáneamente. 
+	# Ahora el jugador solo ganará XP cuando colisione con el nodo de la gema.
+	
+	# if is_instance_valid(player_ref) and player_ref.has_method("gain_experience"):
+	# 	player_ref.gain_experience(points)
 
 ## Compatibilidad con el sistema anterior (por si algún script lo llama)
 func _on_enemy_killed_at(pos: Vector2, points: int) -> void:

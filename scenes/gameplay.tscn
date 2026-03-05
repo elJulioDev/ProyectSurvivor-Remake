@@ -67,8 +67,8 @@ script = ExtResource("6_din8e")
 
 [node name="Particles" type="Node2D" parent="." unique_id=1261640654]
 
-[node name="SpawnManager" type="Node2D" parent="." unique_id=474022568]
-script = ExtResource("7_e124b")
-
 [node name="EnemyManager" type="Node2D" parent="." unique_id=1549364374]
 script = ExtResource("10_hbo4f")
+
+[node name="SpawnManager" type="Node2D" parent="." unique_id=1107055362]
+script = ExtResource("7_e124b")

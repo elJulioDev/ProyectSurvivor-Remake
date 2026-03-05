@@ -48,6 +48,7 @@ var _alive   := PackedByteArray()      # 0=muerto 1=vivo
 var _type    := PackedByteArray()      # índice en TYPE_* arrays
 var _pts     := PackedInt32Array()     # puntos al morir
 var _dmg_inv := PackedFloat32Array()   # invulnerabilidad temporal tras daño
+var _flash   := PackedFloat32Array()   # Temporizador de destello blanco
 
 var _count   : int = 0   # enemigos activos en este frame
 
@@ -88,6 +89,8 @@ func _alloc_arrays() -> void:
 	_pts.resize(n);   _dmg_inv.resize(n)
 	_alive.fill(0)
 	_dmg_inv.fill(0)
+	_flash.fill(0)
+	_flash.resize(n)
 
 func _build_multimesh() -> void:
 	# Quad 1×1 blanco — escalamos vía Transform2D por instancia
@@ -114,8 +117,31 @@ func _build_multimesh() -> void:
 	img.fill(Color.WHITE)
 	_mmi.texture = ImageTexture.create_from_image(img)
 
-	add_child(_mmi)
+	# --- NUEVO CÓDIGO: SHADER PARA RECUPERAR EL ESTILO VISUAL ---
+	var mat = ShaderMaterial.new()
+	mat.shader = Shader.new()
+	mat.shader.code = """
+	shader_type canvas_item;
+	void fragment() {
+		vec4 base_color = COLOR;
+		
+		// Calcular borde (aprox 8% del tamaño del sprite)
+		float b = 0.08;
+		bool is_border = (UV.x < b || UV.x > 1.0 - b || UV.y < b || UV.y > 1.0 - b);
+		
+		// Calcular centro oscuro (1/3 del tamaño)
+		bool is_center = (abs(UV.x - 0.5) < 0.166 && abs(UV.y - 0.5) < 0.166);
 
+		if (is_border || is_center) {
+			// Oscurecer el color base para simular el borde y el centro
+			COLOR = vec4(base_color.rgb * 0.7, base_color.a);
+		}
+	}
+	"""
+	_mmi.material = mat
+	# -----------------------------------------------------------
+
+	add_child(_mmi)
 
 # ════════════════════════════════════════════════════════════════
 #  API PÚBLICA
@@ -158,6 +184,7 @@ func take_damage(idx: int, amount: float,
 		return false
 
 	_hp[idx] -= amount
+	_flash[idx] = 0.166
 
 	# Kickback proporcional al tipo
 	if hit_dir != Vector2.ZERO:
@@ -281,6 +308,10 @@ func _run_logic(delta: float) -> void:
 		# ── Invulnerabilidad temporal ────────────────────────
 		if _dmg_inv[i] > 0.0:
 			_dmg_inv[i] = maxf(0.0, _dmg_inv[i] - delta)
+			
+		# ── Destello de impacto ──────────────────────────────
+		if _flash[i] > 0.0:
+			_flash[i] = maxf(0.0, _flash[i] - delta)
 
 		# ── Mover ────────────────────────────────────────────
 		_px[i] = cx + (_vx[i] + _kx[i]) * delta
@@ -400,12 +431,16 @@ func _update_multimesh() -> void:
 		_mm.set_instance_transform_2d(i,
 			Transform2D(Vector2(sz, 0.0), Vector2(0.0, sz), Vector2(ex, ey)))
 
-		# Color base del tipo, enrojeciendo con poca vida
+		# Color base del tipo
 		var ti     := _type[i]
-		var hppct  := _hp[i] / maxf(_maxhp[i], 1.0)
 		var col    : Color = TYPE_COLORS[ti]
-		if hppct < 0.5:
-			col = col.lerp(Color(0.85, 0.08, 0.08), (0.5 - hppct) * 1.8)
+			
+		# --- Aplicar el destello blanco de impacto ---
+		if _flash[i] > 0.0:
+			var flash_pct := _flash[i] / 0.166
+			# Mezcla hacia color blanco puro dependiendo del tiempo restante
+			col = col.lerp(Color.WHITE, flash_pct * 0.95)
+
 		_mm.set_instance_color(i, col)
 
 	queue_redraw()
