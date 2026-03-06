@@ -208,8 +208,8 @@ func take_damage(idx: int, amount: float,
 		if is_instance_valid(_blood_sys):
 			var dmg_ratio := clampf(amount / maxf(_maxhp[idx], 1.0) * 6.0, 0.0, 1.0)
 			var pos := Vector2(_px[idx], _py[idx])
-			# Llama a tu función original: pos, dir, scale, count, dmg_ratio
-			_blood_sys.create_blood_splatter(pos, hit_dir, 1.2, 8, dmg_ratio)
+			# Llama a tu función original: pos, dir, force, count, dmg_ratio
+			_blood_sys.create_blood_splatter(pos, hit_dir, 1.4, 16, dmg_ratio)
 		
 		_splatter_cd[idx] = 0.12 # Cooldown de 0.12s (igual que en tu script antiguo)
 

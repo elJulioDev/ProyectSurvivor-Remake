@@ -1,7 +1,7 @@
 extends Node2D
 
 # ── Señales ───────────────────────────────────────────────────────────
-signal player_leveled_up
+#signal player_leveled_up
 
 # ── Referencias ──────────────────────────────────────────────────────
 @onready var world:                 Node2D       = $World

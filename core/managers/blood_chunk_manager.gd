@@ -49,8 +49,8 @@ class BloodChunk extends Node2D:
 		add_child(sprite)
 
 	func bake_batch(datos: Array) -> void:
-		var bs    := int(BloodChunkManager.CHUNK_SIZE * BloodChunkManager.BAKE_SCALE)
-		var scale := BloodChunkManager.BAKE_SCALE
+		var bs         := int(BloodChunkManager.CHUNK_SIZE * BloodChunkManager.BAKE_SCALE)
+		var bake_scale := BloodChunkManager.BAKE_SCALE # Renombrado para no chocar con Node2D.scale
 
 		for d in datos:
 			var brush: Image = _manager.get_brush(d.size / 2.0, d.col)
@@ -60,18 +60,24 @@ class BloodChunk extends Node2D:
 			var bh := brush.get_height()
 			var local_x := float(d.pos.x - position.x)
 			var local_y := float(d.pos.y - position.y)
-			var bx  := int(local_x * scale) - bw / 2.0
-			var by_ := int(local_y * scale) - bh / 2.0
+			
+			# Forzamos int() al dividir para evitar que bx y by_ sean floats
+			var bx: int  = int(local_x * bake_scale) - int(bw / 2.0)
+			var by_: int = int(local_y * bake_scale) - int(bh / 2.0)
+			
 			var src_x := 0; var src_y := 0
 			var src_w := bw; var src_h := bh
+			
 			if bx < 0:
 				src_x -= bx; src_w += bx; bx = 0
 			if by_ < 0:
 				src_y -= by_; src_h += by_; by_ = 0
+				
 			src_w = mini(src_w, bs - bx)
 			src_h = mini(src_h, bs - by_)
 			if src_w <= 0 or src_h <= 0:
 				continue
+				
 			image.blend_rect(brush, Rect2i(src_x, src_y, src_w, src_h), Vector2i(bx, by_))
 		dirty = true
 
@@ -132,7 +138,8 @@ func get_brush(world_radius: float, color: Color) -> Image:
 	if brush_cache.has(key):
 		return brush_cache[key]
 	if brush_cache.size() >= MAX_BRUSH_CACHE:
-		var old_keys := brush_cache.keys().slice(0, MAX_BRUSH_CACHE / 2)
+		var limit: int = int(MAX_BRUSH_CACHE / 2.0)
+		var old_keys := brush_cache.keys().slice(0, limit)
 		for k in old_keys:
 			brush_cache.erase(k)
 	var diam := maxi(2, r_baked * 2)
@@ -151,7 +158,7 @@ func get_brush(world_radius: float, color: Color) -> Image:
 
 func _quantize_radius(world_radius: float) -> int:
 	var br := maxi(1, int(world_radius * BAKE_SCALE))
-	return maxi(1, (br + 1) / 2 * 2)
+	return maxi(1, int((br + 1) / 2.0) * 2)
 
 func _quantize_color(color: Color) -> Color:
 	var best := PALETTE[0]

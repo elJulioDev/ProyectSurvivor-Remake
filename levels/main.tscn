@@ -1,5 +1,8 @@
 [gd_scene format=3 uid="uid://blrxnnhkgrwkm"]
 
+[ext_resource type="Script" uid="uid://bdxgrqlg5mwqp" path="res://levels/Main.gd" id="1_2262g"]
+
 [node name="Main" type="Node" unique_id=1326059255]
+script = ExtResource("1_2262g")
 
 [node name="SceneContainer" type="Node" parent="." unique_id=1310926740]
