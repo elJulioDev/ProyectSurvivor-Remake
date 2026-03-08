@@ -9,7 +9,7 @@ func _ready() -> void:
 	_load_scene("res://scenes/menu.tscn", {})
 
 func _on_scene_change(path: String, data: Dictionary) -> void:
-	_load_scene(path, data)
+	call_deferred("_load_scene", path, data)
 
 func _load_scene(path: String, data: Dictionary) -> void:
 	# Limpiar escena anterior

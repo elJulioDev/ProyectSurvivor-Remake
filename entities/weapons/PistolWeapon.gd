@@ -70,14 +70,12 @@ class _ProjectileNode extends Node2D:
 			return
 
 		# ── Colisión con spatial query O(1) ──────────────────────
-		var hits := GameManager.get_enemies_in_radius(global_position, _radius + 16.0)
-		for enemy in hits:
-			var eid : int = enemy.idx
-			if _hit_ids.has(eid):
+		var hits: PackedInt32Array = GameManager.enemy_manager.get_enemies_near_proxy(global_position, _radius + 16.0)
+		for idx in hits:
+			if _hit_ids.has(idx):
 				continue
-			_hit_ids[eid] = true
-			if enemy.has_method("take_damage"):
-				enemy.take_damage(damage, vel.normalized())
+			_hit_ids[idx] = true
+			GameManager.enemy_manager.damage_enemy(idx, damage, vel.normalized(), 0.0)
 			pen -= 1
 			if pen <= 0:
 				queue_free()

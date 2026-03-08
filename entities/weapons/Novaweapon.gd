@@ -79,13 +79,11 @@ class _NovaProjectile extends Node2D:
 		lifetime  += frames
 		if lifetime >= max_lifetime: queue_free(); return
 		# ── Spatial query ────────────────────────────────────
-		var hits := GameManager.get_enemies_in_radius(global_position, radius + 12.0)
-		for enemy in hits:
-			if _hit_ids.has(enemy.idx): continue
-			_hit_ids[enemy.idx] = true
-			enemy.take_damage(damage, velocity.normalized())
-			if enemy.has_method("apply_knockback"):
-				enemy.apply_knockback(global_position, 6.0)
+		var hits : PackedInt32Array = GameManager.enemy_manager.get_enemies_near_proxy(global_position, radius + 12.0)
+		for idx in hits:
+			if _hit_ids.has(idx): continue
+			_hit_ids[idx] = true
+			GameManager.enemy_manager.damage_enemy(idx, damage, velocity.normalized(), 6.0)
 			# Penetración infinita → no decrementar
 
 	func _draw() -> void:

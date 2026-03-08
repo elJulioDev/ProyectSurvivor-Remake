@@ -42,14 +42,13 @@ func _check_hits() -> void:
 
 	for orb_pos in positions:
 		# ── Spatial query ────────────────────────────────────────
-		var hits := GameManager.get_enemies_in_radius(orb_pos, hit_r)
-		for enemy in hits:
-			if _hit_cd.has(enemy.idx): continue
-			_hit_cd[enemy.idx] = hit_cooldown_max
-			var hit_dir: Vector2 = (enemy.global_position - orb_pos).normalized()
-			enemy.take_damage(final_dmg, hit_dir)
-			if enemy.has_method("apply_knockback"):
-				enemy.apply_knockback(orb_pos, 9.0 * kb_mult)
+		var hits : PackedInt32Array = GameManager.enemy_manager.get_enemies_near_proxy(orb_pos, hit_r)
+		for idx in hits:
+			if _hit_cd.has(idx): continue
+			_hit_cd[idx] = hit_cooldown_max
+			var enemy_pos = GameManager.enemy_manager.positions[idx]
+			var hit_dir: Vector2 = (enemy_pos - orb_pos).normalized()
+			GameManager.enemy_manager.damage_enemy(idx, final_dmg, hit_dir, 9.0 * kb_mult)
 
 func _get_orb_positions() -> Array:
 	if owner_player == null: return []

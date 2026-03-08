@@ -126,16 +126,14 @@ class _SniperBullet extends Node2D:
 		# Consulta en el radio del segmento recorrido este frame
 		var mid     := (_prev_pos + position) * 0.5
 		var seg_len := position.distance_to(_prev_pos)
-		var hits    := GameManager.get_enemies_in_radius(mid, seg_len * 0.5 + radius + 14.0)
-		for enemy in hits:
-			if _hit_ids.has(enemy.idx): continue
-			var d := _point_to_segment_dist(
-				enemy.global_position, _prev_pos, position)
+		var hits    : PackedInt32Array = GameManager.enemy_manager.get_enemies_near_proxy(mid, seg_len * 0.5 + radius + 14.0)
+		for idx in hits:
+			if _hit_ids.has(idx): continue
+			var enemy_pos = GameManager.enemy_manager.positions[idx]
+			var d := _point_to_segment_dist(enemy_pos, _prev_pos, position)
 			if d <= radius + 14.0:
-				_hit_ids[enemy.idx] = true
-				enemy.take_damage(damage, velocity.normalized())
-				if enemy.has_method("apply_knockback"):
-					enemy.apply_knockback(global_position, 12.0)
+				_hit_ids[idx] = true
+				GameManager.enemy_manager.damage_enemy(idx, damage, velocity.normalized(), 12.0)
 				penetration -= 1
 				if penetration <= 0:
 					queue_free(); return

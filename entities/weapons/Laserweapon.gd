@@ -33,20 +33,20 @@ func _deal_beam_damage(delta: float) -> void:
 	var hit_dir: Vector2 = Vector2(cos(angle), sin(angle))
 
 	# ── Spatial query a lo largo del rayo ─────────────────────────
-	# Muestreamos el rayo en segmentos y consultamos el spatial hash
 	var seg_len := 200.0
 	var ray_len := max_range
 	var checked_ids: Dictionary = {}
 	var t := 0.0
 	while t < ray_len:
 		var sample_pos := origin + hit_dir * (t + seg_len * 0.5)
-		var hits := GameManager.get_enemies_in_radius(sample_pos, seg_len * 0.5 + 20.0)
-		for enemy in hits:
-			if checked_ids.has(enemy.idx): continue
+		var hits : PackedInt32Array = GameManager.enemy_manager.get_enemies_near_proxy(sample_pos, seg_len * 0.5 + 20.0)
+		for idx in hits:
+			if checked_ids.has(idx): continue
+			var enemy_pos = GameManager.enemy_manager.positions[idx]
 			# Verificar distancia al segmento completo
-			if _point_near_segment(enemy.global_position, origin, end, 20.0):
-				checked_ids[enemy.idx] = true
-				enemy.take_damage(dmg_this_frame, hit_dir)
+			if _point_near_segment(enemy_pos, origin, end, 20.0):
+				checked_ids[idx] = true
+				GameManager.enemy_manager.damage_enemy(idx, dmg_this_frame, hit_dir, 0.0)
 		t += seg_len
 
 func shoot() -> bool:

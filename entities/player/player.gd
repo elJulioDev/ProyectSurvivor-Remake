@@ -324,8 +324,11 @@ func add_weapon(weapon_class_name: String) -> void:
 		return
 
 	var script_res = load(path)
-	var weapon_node := Node2D.new()
-	weapon_node.set_script(script_res)
+	var weapon_node = script_res.new() 
+	weapon_node.name = weapon_class_name
+	if "owner_player" in weapon_node:
+		weapon_node.owner_player = self
+
 	weapon_node.name = weapon_class_name	
 	# Solo asigna el jugador si el arma tiene la variable "owner_player"
 	if "owner_player" in weapon_node:
