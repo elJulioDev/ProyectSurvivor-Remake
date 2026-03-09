@@ -1,8 +1,5 @@
 extends Node2D
 
-# ── Señales ───────────────────────────────────────────────────────────
-#signal player_leveled_up
-
 # ── Referencias ──────────────────────────────────────────────────────
 @onready var world:                 Node2D       = $World
 @onready var projectiles_container: Node2D       = $World/Projectiles
@@ -10,9 +7,9 @@ extends Node2D
 @onready var camera:                Camera2D     = $Camera2D
 @onready var hud:                   Control      = $HUD/HUDControl
 @onready var spawn_manager:         SpawnManager = $SpawnManager
-
-# EnemyManager: nodo hijo añadido en esta escena (ver gameplay.tscn)
-@onready var enemy_manager: Node2D = $EnemyManager
+@onready var enemy_manager:         Node2D       = $EnemyManager
+@onready var gem_manager:           GemManager   = $GemManager
+@onready var upgrade_layer:         CanvasLayer  = $UpgradeLayer
 
 # ── Estado ───────────────────────────────────────────────────────────
 var score:     int   = 0
@@ -21,17 +18,31 @@ var game_time: float = 0.0
 
 var player_ref: Node2D = null
 
+## True mientras hay una pantalla de upgrade visible
+var _upgrade_active: bool = false
+
 # ── Escena de gema de experiencia ────────────────────────────────────
 @export var gem_scene: PackedScene
 
+# ── Tabla de drop de gemas por tipo de enemigo ───────────────────────
+## key = points del enemigo  → [xp_base, extra_gems_prob, extra_gems_max]
+const GEM_DROP_TABLE : Dictionary = {
+	5:  [3,  0.0,  0],   # small
+	10: [6,  0.15, 1],   # normal
+	20: [14, 0.30, 2],   # large
+	60: [45, 0.60, 3],   # tank
+	22: [15, 0.20, 1],   # exploder
+	30: [20, 0.25, 2],   # spitter
+}
+
+# ────────────────────────────────────────────────────────────────────
+
 func _ready() -> void:
-	# Registrar el EnemyManager en el autoload para que las armas lo usen
 	GameManager.enemy_manager = enemy_manager
 
-	# Pasar el manager al SpawnManager
 	spawn_manager.setup(enemy_manager)
+	gem_manager.setup(gems_container)
 
-	# Conectar señal de muerte de enemigos
 	enemy_manager.enemy_killed.connect(_on_enemy_killed)
 
 	_setup_camera()
@@ -69,42 +80,104 @@ func _process(delta: float) -> void:
 	if player_ref and "level" in player_ref:
 		current_level = player_ref.level
 
-	# Actualizar Spawner con el conteo actual del EnemyManager (no de nodos hijos)
 	if is_instance_valid(player_ref):
 		var current_enemies : int = enemy_manager.get_active_count()
 		spawn_manager.update_spawner(delta, current_enemies,
 									 player_ref.global_position, current_level)
 
-# ── Señal de muerte de enemigo (viene de EnemyManager) ──────────────
+# ════════════════════════════════════════════════════════════════
+#  DROPS DE GEMA
+# ════════════════════════════════════════════════════════════════
+
+## Señal recibida desde EnemyManager cuando un enemigo muere.
 func _on_enemy_killed(pos: Vector2, points: int) -> void:
 	score += points * 100
+	_drop_gems(pos, points)
 
-	# Drop de gema de experiencia (~25% de probabilidad)
-	if randi() % 4 == 0 and gem_scene:
-		var gem := gem_scene.instantiate()
-		gems_container.add_child(gem)
-		gem.global_position = pos
-		# Si la gema tiene un método de setup, llamarlo
-		if gem.has_method("setup"):
-			gem.setup(1)
-
-	# --- LÍNEAS ELIMINADAS ---
-	# El código de abajo causaba que la barra subiera instantáneamente. 
-	# Ahora el jugador solo ganará XP cuando colisione con el nodo de la gema.
-	
-	# if is_instance_valid(player_ref) and player_ref.has_method("gain_experience"):
-	# 	player_ref.gain_experience(points)
-
-## Compatibilidad con el sistema anterior (por si algún script lo llama)
-func _on_enemy_killed_at(pos: Vector2, points: int) -> void:
-	_on_enemy_killed(pos, points)
-
-func _update_hud() -> void:
-	if not is_instance_valid(hud):
+func _drop_gems(pos: Vector2, points: int) -> void:
+	if not gem_scene:
 		return
-	hud.score         = score
-	hud.enemies_alive = enemy_manager.get_active_count()
-	hud.wave_time_str = _format_time(game_time)
+
+	# Buscar entrada en la tabla (fallback al valor más cercano)
+	var entry : Array = GEM_DROP_TABLE.get(points, [points, 0.15, 1])
+	var xp_base      : int   = entry[0]
+	var extra_prob   : float = entry[1]
+	var extra_max    : int   = entry[2]
+
+	# Ajustar XP con bonus del jugador (xp_on_kill_bonus)
+	var bonus_xp : int = 0
+	if is_instance_valid(player_ref) and "xp_on_kill_bonus" in player_ref:
+		bonus_xp = player_ref.xp_on_kill_bonus
+
+	# Gema principal (siempre se suelta)
+	_spawn_gem(pos, xp_base + bonus_xp)
+
+	# Gemas extras (probabilísticas, dan el desbordamiento visual)
+	if extra_max > 0 and randf() < extra_prob:
+		var extras : int = randi_range(1, extra_max)
+		var small_xp : int = maxi(1, int(xp_base * 0.3))
+		for _i in range(extras):
+			_spawn_gem(pos, small_xp)
+
+func _spawn_gem(pos: Vector2, xp: int) -> void:
+	var gem := gem_scene.instantiate()
+	gems_container.add_child(gem)
+	gem.global_position = pos
+	if gem.has_method("setup"):
+		gem.setup(xp)
+
+# ════════════════════════════════════════════════════════════════
+#  PANTALLA DE MEJORA (overlay — no cambia de escena)
+# ════════════════════════════════════════════════════════════════
+
+func _on_player_leveled_up() -> void:
+	# Si ya hay una pantalla activa, la cola de niveles se procesa
+	# al cerrar la pantalla actual (_show_upgrade_screen gestiona esto)
+	if _upgrade_active:
+		return
+	_show_upgrade_screen()
+
+func _show_upgrade_screen() -> void:
+	if not is_instance_valid(player_ref):
+		get_tree().paused = false
+		return
+	if player_ref.pending_level_ups <= 0:
+		get_tree().paused = false
+		return
+
+	_upgrade_active   = true
+	get_tree().paused = true
+
+	var upgrade_packed := load("res://scenes/upgrade.tscn") as PackedScene
+	if not upgrade_packed:
+		push_error("gameplay.gd: no se encontró res://scenes/upgrade.tscn")
+		get_tree().paused = false
+		_upgrade_active   = false
+		return
+
+	var upgrade_node := upgrade_packed.instantiate()
+	upgrade_layer.add_child(upgrade_node)
+	upgrade_node.setup(player_ref)
+
+	# Callback al seleccionar una mejora
+	upgrade_node.upgrade_selected.connect(
+		func() -> void:
+			upgrade_node.queue_free()
+			player_ref.pending_level_ups -= 1
+			_upgrade_active = false
+
+			# Si subió varios niveles de golpe, mostrar otra carta
+			if player_ref.pending_level_ups > 0:
+				# Esperar un frame para que queue_free() se procese
+				await get_tree().process_frame
+				_show_upgrade_screen()
+			else:
+				get_tree().paused = false
+	)
+
+# ════════════════════════════════════════════════════════════════
+#  CALLBACKS DE JUGADOR
+# ════════════════════════════════════════════════════════════════
 
 func _on_player_died() -> void:
 	game_over = true
@@ -114,9 +187,16 @@ func _on_player_died() -> void:
 		"time":  _format_time(game_time),
 	})
 
-func _on_player_leveled_up() -> void:
-	get_tree().paused = true
-	GameManager.goto_scene("res://scenes/upgrade.tscn", {})
+# ════════════════════════════════════════════════════════════════
+#  HUD
+# ════════════════════════════════════════════════════════════════
+
+func _update_hud() -> void:
+	if not is_instance_valid(hud):
+		return
+	hud.score         = score
+	hud.enemies_alive = enemy_manager.get_active_count()
+	hud.wave_time_str = _format_time(game_time)
 
 func _format_time(seconds: float) -> String:
 	var m: int = floori(seconds / 60.0)

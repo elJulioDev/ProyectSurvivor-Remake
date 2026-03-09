@@ -1,6 +1,7 @@
 [gd_scene format=3 uid="uid://daig871mpycsa"]
 
 [ext_resource type="Script" uid="uid://lbco4d7tvpgt" path="res://levels/gameplay.gd" id="1_6p5th"]
+[ext_resource type="PackedScene" uid="uid://d3cjcy6kne4vt" path="res://entities/interactables/experience_gem.tscn" id="2_2i4lx"]
 [ext_resource type="Script" uid="uid://cudqalr7suo7i" path="res://levels/world/background_layer.gd" id="2_rokjk"]
 [ext_resource type="Script" uid="uid://v20cksyl2rbp" path="res://core/utils/blood_particle_system.gd" id="3_2i4lx"]
 [ext_resource type="Script" uid="uid://byirda0kq0kow" path="res://core/managers/blood_decal_manager.gd" id="4_6p5th"]
@@ -10,9 +11,11 @@
 [ext_resource type="Script" uid="uid://c0lmc2e4y7cja" path="res://ui/hud/crosshair.gd" id="8_c5pgr"]
 [ext_resource type="Script" uid="uid://u6ogjnwe8y1q" path="res://core/managers/EnemyManager.gd" id="9_rgnag"]
 [ext_resource type="Script" uid="uid://bdvhc4dq54saq" path="res://core/managers/spawn_manager.gd" id="10_ooudo"]
+[ext_resource type="Script" uid="uid://dvdv3q458pa1t" path="res://core/managers/gem_manager.gd" id="12_2i4lx"]
 
 [node name="Gameplay" type="Node2D" unique_id=1330324624]
 script = ExtResource("1_6p5th")
+gem_scene = ExtResource("2_2i4lx")
 
 [node name="World" type="Node2D" parent="." unique_id=1752792137]
 
@@ -27,6 +30,8 @@ script = ExtResource("3_2i4lx")
 chunk_manager = NodePath("../BloodDecalManager")
 
 [node name="Projectiles" type="Node2D" parent="World" unique_id=1478964526 groups=["projectiles"]]
+
+[node name="Gems" type="Node2D" parent="World" unique_id=1355679520]
 
 [node name="Player" parent="World" unique_id=1871687937 instance=ExtResource("5_876sc")]
 
@@ -58,8 +63,14 @@ mouse_filter = 2
 script = ExtResource("8_c5pgr")
 metadata/_edit_use_anchors_ = true
 
+[node name="UpgradeLayer" type="CanvasLayer" parent="." unique_id=1922299798]
+layer = 10
+
 [node name="SpawnManager" type="Node2D" parent="." unique_id=1107055362]
 script = ExtResource("10_ooudo")
 
 [node name="EnemyManager" type="Node2D" parent="." unique_id=1549364374]
 script = ExtResource("9_rgnag")
+
+[node name="GemManager" type="Node2D" parent="." unique_id=147622534]
+script = ExtResource("12_2i4lx")

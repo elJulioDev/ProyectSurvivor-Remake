@@ -1,3 +1,6 @@
-[gd_scene format=3 uid="uid://camkk1afvljuc"]
+[gd_scene format=3 uid="uid://d3cjcy6kne4vt"]
 
-[node name="ExperienceGem" type="Node2D" unique_id=141276893]
+[ext_resource type="Script" uid="uid://bqtdig65trff5" path="res://entities/interactables/experience_gem.gd" id="1_6yobu"]
+
+[node name="ExperienceGem" type="Node2D" unique_id=1779385908]
+script = ExtResource("1_6yobu")
