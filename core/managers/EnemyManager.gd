@@ -21,6 +21,8 @@ const GRID_CELL_SIZE = 64.0
 const GRID_WIDTH = 400
 const GRID_HEIGHT = 400
 const GRID_OFFSET = 12800.0
+var _current_batch: int = 0
+const BATCH_COUNT: int = 4
 
 # ════════════════════════════════════════════════════════════════════════════
 #  2. ESTRUCTURA DE ARREGLOS
@@ -37,6 +39,8 @@ var speeds      := PackedFloat32Array()
 var sizes       := PackedFloat32Array()
 var hit_flashes := PackedFloat32Array()
 var lanes       := PackedFloat32Array() 
+var bleed_intensities := PackedFloat32Array()
+var bleed_cooldowns   := PackedFloat32Array()
 
 var types       := PackedInt32Array()
 var damages     := PackedInt32Array()
@@ -120,6 +124,8 @@ func _init_arrays() -> void:
 	types.resize(MAX_ENEMIES); damages.resize(MAX_ENEMIES); points.resize(MAX_ENEMIES)
 	grid_head.resize(GRID_WIDTH * GRID_HEIGHT)
 	grid_next.resize(MAX_ENEMIES)
+	bleed_intensities.resize(MAX_ENEMIES)
+	bleed_cooldowns.resize(MAX_ENEMIES)
 
 func _init_multimesh() -> void:
 	multimesh = MultiMesh.new()
@@ -128,6 +134,7 @@ func _init_multimesh() -> void:
 	multimesh.use_custom_data = true
 	multimesh.instance_count = MAX_ENEMIES
 	multimesh.visible_instance_count = 0
+	multimesh.custom_aabb = AABB(Vector3(-100000, -100000, -1), Vector3(200000, 200000, 2))
 	
 	var custom_mat = ShaderMaterial.new()
 	var shader = Shader.new()
@@ -174,8 +181,11 @@ func spawn(pos: Vector2, type_name: String, speed_multiplier: float, health_mult
 	hit_flashes[idx] = 0.0
 	lanes[idx] = sin(pos.x * 0.0071 + pos.y * 0.0053) 
 	
+	bleed_intensities[idx] = 0.0
+	bleed_cooldowns[idx] = 0.0
+
 	active_count += 1
-	multimesh.visible_instance_count = active_count
+	#multimesh.visible_instance_count = active_count
 
 func teleport_distant(player_pos: Vector2) -> void:
 	var max_dist_sq = 1900.0 * 1900.0 
@@ -191,30 +201,82 @@ func teleport_distant(player_pos: Vector2) -> void:
 #  5. LÓGICA DE MOVIMIENTO MULTI-HILO (IA Predictiva Corregida)
 # ════════════════════════════════════════════════════════════════════════════
 func _physics_process(delta: float) -> void:
-	if active_count == 0: return
+	_cleanup_dead_enemies()
+	if active_count == 0: 
+		multimesh.visible_instance_count = 0
+		return
+		
 	var player = get_tree().get_first_node_in_group("player")
 	if not player: return
 	
 	var p_pos = player.global_position
 	var p_vel = player.velocity if "velocity" in player else Vector2.ZERO
 	
+	# NUEVO: Ejecutar el reciclaje de rezagados (cada medio segundo para no saturar)
+	if Engine.get_process_frames() % 30 == 0:
+		teleport_distant(p_pos)
+	
 	_build_grid()
 	
-	var group_id = WorkerThreadPool.add_group_task(_process_enemy_movement.bind(delta, p_pos, p_vel), active_count)
+	_current_batch = (_current_batch + 1) % BATCH_COUNT
+	
+	var group_id = WorkerThreadPool.add_group_task(_process_enemy_movement.bind(delta, p_pos, p_vel, _current_batch), active_count)
 	WorkerThreadPool.wait_for_group_task_completion(group_id)
 	
 	var render_hp_dist_sq = 550.0 * 550.0 
+	var particle_sys = get_tree().get_first_node_in_group("blood_particles")
 	
+	# NUEVO: Limites dinámicos basados en la cámara actual
+	var viewport = get_viewport()
+	var cam = viewport.get_camera_2d()
+	var cam_zoom = cam.zoom if cam else Vector2.ONE
+	var view_size = viewport.get_visible_rect().size / cam_zoom
+	
+	var half_screen_x = (view_size.x * 0.5) + 300.0 # 300px de margen
+	var half_screen_y = (view_size.y * 0.5) + 300.0
+	
+	var visible_count = 0
+	var drips_this_frame = 0
+	const MAX_DRIPS_PER_FRAME = 3 # Estrangulamiento estricto de partículas
+	
+	# 2. CULLING DE RENDERIZADO Y ACTUALIZACIÓN DE ESTADO
 	for i in range(active_count):
-		# SOLUCIÓN BARRA DE VIDA: Ampliamos la malla invisible un 40% (1.4).
-		# El shader dibuja la vida en ese espacio extra para no tocar el sprite
-		var quad_size = sizes[i] * 1.4
-		var t = Transform2D(0, Vector2(quad_size, quad_size), 0, positions[i])
-		multimesh.set_instance_transform_2d(i, t)
+		var pos = positions[i]
 		
-		var hp_pct = healths[i] / max_healths[i]
-		var show_hp = 1.0 if healths[i] < max_healths[i] and positions[i].distance_squared_to(p_pos) < render_hp_dist_sq else 0.0
-		multimesh.set_instance_custom_data(i, Color(float(types[i]), hp_pct, hit_flashes[i], show_hp))
+		# --- LÓGICA DE GOTEO DE SANGRE ACELERADA ---
+		if bleed_intensities[i] > 0.0:
+			bleed_intensities[i] -= 0.3 * delta * 60.0 
+			if bleed_intensities[i] <= 0.0:
+				bleed_intensities[i] = 0.0
+			else:
+				bleed_cooldowns[i] -= delta * 60.0
+				if bleed_cooldowns[i] <= 0.0 and drips_this_frame < MAX_DRIPS_PER_FRAME:
+					if particle_sys:
+						particle_sys.create_blood_drip(pos, bleed_intensities[i])
+					bleed_cooldowns[i] = maxf(2.0, 20.0 - (bleed_intensities[i] * 0.8))
+					drips_this_frame += 1
+		
+		# --- FRUSTUM CULLING MANUAL ---
+		# Solo renderizamos si el enemigo está razonablemente cerca de la pantalla
+		var dist_x = abs(pos.x - p_pos.x)
+		var dist_y = abs(pos.y - p_pos.y)
+		
+		if dist_x < half_screen_x and dist_y < half_screen_y:
+			var quad_size = sizes[i] * 1.4
+			var t = Transform2D(0, Vector2(quad_size, quad_size), 0, pos)
+			
+			# ¡CLAVE! Insertamos en el índice 'visible_count', NO en 'i'. 
+			# Comprimimos los enemigos visibles al principio del buffer del MultiMesh.
+			multimesh.set_instance_transform_2d(visible_count, t)
+			
+			var hp_pct = clampf(healths[i] / max_healths[i], 0.0, 1.0)
+			var show_hp = 1.0 if healths[i] < max_healths[i] and (dist_x*dist_x + dist_y*dist_y) < render_hp_dist_sq else 0.0
+			multimesh.set_instance_custom_data(visible_count, Color(float(types[i]), hp_pct, hit_flashes[i], show_hp))
+			
+			visible_count += 1
+
+	# Indicamos a la GPU cuántos quads dibujar realmente
+	multimesh.visible_instance_count = visible_count
 
 func _build_grid() -> void:
 	grid_head.fill(-1)
@@ -226,83 +288,85 @@ func _build_grid() -> void:
 		grid_next[i] = grid_head[cell_idx]
 		grid_head[cell_idx] = i
 
-func _process_enemy_movement(i: int, delta: float, p_pos: Vector2, p_vel: Vector2) -> void:
+func _process_enemy_movement(i: int, delta: float, p_pos: Vector2, p_vel: Vector2, current_batch: int) -> void:
 	var pos = positions[i]
 	var spd = speeds[i]
 	
-	# --- 1. IA PREDICTIVA CORREGIDA ---
-	# ERROR ANTERIOR: Godot da p_vel en px/segundo (ej: 300). Pygame lo daba en px/frame (ej: 5).
-	# SOLUCIÓN: Convertimos la velocidad a per-frame dividiendo por 60 para que no apunten a miles de px de distancia.
-	var p_vel_frame = p_vel / 60.0
-	
-	var raw_dist = pos.distance_to(p_pos)
-	var predict_t = minf(18.0, raw_dist / maxf(1.0, spd * 2.5))
-	var target_pos = p_pos + p_vel_frame * (predict_t * 0.55)
-	var dir = pos.direction_to(target_pos)
-	if dir == Vector2.ZERO: dir = Vector2.RIGHT
-	
-	# --- 2. SEPARACIÓN ---
-	var push_x = 0.0
-	var push_y = 0.0
-	var sep_radius = sizes[i] * 0.4 * 4.0 
-	var cr_sq = sep_radius * sep_radius
-	var count = 0
-	
-	var cx = clampi(int((pos.x + GRID_OFFSET) / GRID_CELL_SIZE), 0, GRID_WIDTH - 1)
-	var cy = clampi(int((pos.y + GRID_OFFSET) / GRID_CELL_SIZE), 0, GRID_HEIGHT - 1)
-	
-	for dy in range(-1, 2):
-		for dx in range(-1, 2):
-			var nx = clampi(cx + dx, 0, GRID_WIDTH - 1)
-			var ny = clampi(cy + dy, 0, GRID_HEIGHT - 1)
-			var enemy_idx = grid_head[nx + ny * GRID_WIDTH]
-			
-			while enemy_idx != -1:
-				if enemy_idx != i:
-					var other_pos = positions[enemy_idx]
-					var odx = pos.x - other_pos.x
-					var ody = pos.y - other_pos.y
-					var odist_sq = odx * odx + ody * ody
-					
-					if odist_sq > 0.0001 and odist_sq < cr_sq:
-						var odist = sqrt(odist_sq)
-						var overlap = sep_radius - odist
-						var ps = overlap * (overlap / sep_radius) * 0.18
-						push_x += (odx / odist) * ps
-						push_y += (ody / odist) * ps
-						count += 1
-				enemy_idx = grid_next[enemy_idx]
-				
-	if count > 1:
-		var inv_sqrt = 1.0 / sqrt(float(count))
-		push_x *= inv_sqrt
-		push_y *= inv_sqrt
+	# 1. IA PREDICTIVA Y SEPARACIÓN (Solo se calcula 1 vez cada BATCH_COUNT frames)
+	if i % BATCH_COUNT == current_batch:
+		var p_vel_frame = p_vel / 60.0
+		var raw_dist = pos.distance_to(p_pos)
+		var predict_t = minf(18.0, raw_dist / maxf(1.0, spd * 2.5))
+		var target_pos = p_pos + p_vel_frame * (predict_t * 0.55)
+		var dir = pos.direction_to(target_pos)
+		if dir == Vector2.ZERO: dir = Vector2.RIGHT
 		
-	var push_sq = push_x * push_x + push_y * push_y
-	var max_push = spd * 1.2
-	if push_sq > max_push * max_push:
-		var inv_pm = max_push / sqrt(push_sq)
-		push_x *= inv_pm; push_y *= inv_pm
+		var push_x = 0.0
+		var push_y = 0.0
+		var sep_radius = sizes[i] * 0.4 * 4.0 
+		var cr_sq = sep_radius * sep_radius
+		var count = 0
+		
+		var cx = clampi(int((pos.x + GRID_OFFSET) / GRID_CELL_SIZE), 0, GRID_WIDTH - 1)
+		var cy = clampi(int((pos.y + GRID_OFFSET) / GRID_CELL_SIZE), 0, GRID_HEIGHT - 1)
+		
+		for dy in range(-1, 2):
+			for dx in range(-1, 2):
+				var nx = clampi(cx + dx, 0, GRID_WIDTH - 1)
+				var ny = clampi(cy + dy, 0, GRID_HEIGHT - 1)
+				var enemy_idx = grid_head[nx + ny * GRID_WIDTH]
+				
+				# ¡LA CLAVE DEL RENDIMIENTO! Limitar a 4 empujes máximos
+				while enemy_idx != -1 and count < 4:
+					if enemy_idx != i:
+						var other_pos = positions[enemy_idx]
+						var odx = pos.x - other_pos.x
+						var ody = pos.y - other_pos.y
+						var odist_sq = odx * odx + ody * ody
+						
+						if odist_sq > 0.0001 and odist_sq < cr_sq:
+							var odist = sqrt(odist_sq)
+							var overlap = sep_radius - odist
+							var ps = overlap * (overlap / sep_radius) * 0.18
+							push_x += (odx / odist) * ps
+							push_y += (ody / odist) * ps
+							count += 1
+					enemy_idx = grid_next[enemy_idx]
+					
+		if count > 1:
+			# Fast inverse square root proxy
+			var inv_sqrt = 1.0 / sqrt(float(count))
+			push_x *= inv_sqrt
+			push_y *= inv_sqrt
+			
+		var push_sq = push_x * push_x + push_y * push_y
+		var max_push = spd * 1.2
+		if push_sq > max_push * max_push:
+			var inv_pm = max_push / sqrt(push_sq)
+			push_x *= inv_pm
+			push_y *= inv_pm
 
-	# --- 3. CARRILES SUAVES ---
-	var perp = Vector2(-dir.y, dir.x)
-	var lat_strength = 0.38 * spd
-	var lane_vel = perp * lanes[i] * lat_strength
+		var perp = Vector2(-dir.y, dir.x)
+		var lat_strength = 0.38 * spd
+		var lane_vel = perp * lanes[i] * lat_strength
+		
+		var target_vx = dir.x * spd + push_x + lane_vel.x
+		var target_vy = dir.y * spd + push_y + lane_vel.y
+		
+		# Solo interpolamos la velocidad objetivo en el frame del batch
+		var lerp_f = 0.40
+		var cv = velocities[i]
+		velocities[i] = Vector2(cv.x * (1.0 - lerp_f) + target_vx * lerp_f, cv.y * (1.0 - lerp_f) + target_vy * lerp_f)
 	
-	var target_vx = dir.x * spd + push_x + lane_vel.x
-	var target_vy = dir.y * spd + push_y + lane_vel.y
-	
-	# Interpola para quitar lo robótico
-	var lerp_f = 0.40
-	var cv = velocities[i]
-	velocities[i] = Vector2(cv.x * (1.0 - lerp_f) + target_vx * lerp_f, cv.y * (1.0 - lerp_f) + target_vy * lerp_f)
-	
+	# 2. MOVIMIENTO E INTEGRACIÓN FÍSICA (Se ejecuta SIEMPRE para mantener fluidez)
 	if knockbacks[i].length_squared() > 0.01:
 		knockbacks[i] *= pow(0.88, delta * 60.0)
 		if knockbacks[i].length() < 0.1: knockbacks[i] = Vector2.ZERO
 			
 	positions[i] += (velocities[i] + knockbacks[i]) * delta
-	if hit_flashes[i] > 0.0: hit_flashes[i] = maxf(0.0, hit_flashes[i] - delta * 6.0)
+	
+	if hit_flashes[i] > 0.0: 
+		hit_flashes[i] = maxf(0.0, hit_flashes[i] - delta * 6.0)
 
 # ════════════════════════════════════════════════════════════════════════════
 #  6. SISTEMA DE DAÑO Y BÚSQUEDA ESPACIAL
@@ -325,19 +389,41 @@ func get_enemies_near_proxy(pos: Vector2, radius: float) -> PackedInt32Array:
 
 func damage_enemy(idx: int, amount: float, hit_dir: Vector2 = Vector2.ZERO, knockback_force: float = 0.0) -> void:
 	if idx < 0 or idx >= active_count: return
+	if healths[idx] <= 0: return # Evita recalcular a un enemigo ya muerto
+
+	# 1. BLINDAJE CONTRA CORRUPCIÓN (Evita invisibilidad)
+	if is_nan(amount): amount = 0.0
+	
+	# Normalizar el vector de forma segura para evitar "teletransportes" a X=NaN
+	if is_nan(hit_dir.x) or is_nan(hit_dir.y) or hit_dir.length_squared() < 0.001:
+		hit_dir = Vector2.ZERO
+	else:
+		hit_dir = hit_dir.normalized()
+
 	healths[idx] -= amount
-	hit_flashes[idx] = 1.0 
-	if knockback_force > 0.0:
+	hit_flashes[idx] = 1.0
+	bleed_intensities[idx] = minf(40.0, bleed_intensities[idx] + amount)
+	
+	# 2. APLICAR KNOCKBACK ESTRICTO
+	if knockback_force > 0.0 and hit_dir != Vector2.ZERO:
 		var size_factor = 40.0 / maxf(1.0, sizes[idx])
-		knockbacks[idx] += hit_dir * knockback_force * size_factor * 60.0
-		# Límite reducido de 1500 a 500 para evitar que salgan volando por cadencias altas
-		if knockbacks[idx].length() > 500.0:
-			knockbacks[idx] = knockbacks[idx].limit_length(500.0)
+		var frame_knockback = hit_dir * knockback_force * size_factor * 60.0
+		
+		# Solo aplicar si el vector matemático es válido
+		if not is_nan(frame_knockback.x) and not is_nan(frame_knockback.y):
+			knockbacks[idx] += frame_knockback
+			if knockbacks[idx].length() > 500.0:
+				knockbacks[idx] = knockbacks[idx].limit_length(500.0)
+				
+	# 3. SANGRE Y EFECTOS
 	var particle_sys = get_tree().get_first_node_in_group("blood_particles")
 	if particle_sys:
 		var dmg_ratio = clampf(amount / max_healths[idx] * 6.0, 0.0, 1.0)
 		particle_sys.create_blood_splatter(positions[idx], hit_dir, 1.2, 8, dmg_ratio)
-	if healths[idx] <= 0: _kill_enemy(idx)
+		if amount > 10.0 or dmg_ratio > 0.3:
+			particle_sys.create_wound_stain(positions[idx], dmg_ratio)
+
+	# if healths[idx] <= 0: _kill_enemy(idx)
 
 func _kill_enemy(idx: int) -> void:
 	enemy_killed.emit(positions[idx], points[idx])
@@ -351,3 +437,16 @@ func _kill_enemy(idx: int) -> void:
 		sizes[idx] = sizes[active_count]; types[idx] = types[active_count]
 		damages[idx] = damages[active_count]; points[idx] = points[active_count]
 		hit_flashes[idx] = hit_flashes[active_count]; lanes[idx] = lanes[active_count]
+		bleed_intensities[idx] = bleed_intensities[active_count]
+		bleed_cooldowns[idx]   = bleed_cooldowns[active_count]
+
+func _cleanup_dead_enemies() -> void:
+	var i = 0
+	while i < active_count:
+		if healths[i] <= 0:
+			_kill_enemy(i)
+			# ATENCIÓN: No sumamos i += 1 aquí.
+			# Como _kill_enemy movió al último enemigo a este índice 'i',
+			# debemos volver a revisar este mismo índice en la siguiente iteración.
+		else:
+			i += 1

@@ -3,7 +3,7 @@
 [ext_resource type="Script" uid="uid://lbco4d7tvpgt" path="res://levels/gameplay.gd" id="1_6p5th"]
 [ext_resource type="Script" uid="uid://cudqalr7suo7i" path="res://levels/world/background_layer.gd" id="2_rokjk"]
 [ext_resource type="Script" uid="uid://v20cksyl2rbp" path="res://core/utils/blood_particle_system.gd" id="3_2i4lx"]
-[ext_resource type="Script" uid="uid://c2iqnack2opr2" path="res://core/managers/blood_chunk_manager.gd" id="4_jdxhe"]
+[ext_resource type="Script" uid="uid://byirda0kq0kow" path="res://core/managers/blood_decal_manager.gd" id="4_6p5th"]
 [ext_resource type="PackedScene" uid="uid://j1e488b6hoow" path="res://entities/player/player.tscn" id="5_876sc"]
 [ext_resource type="Script" uid="uid://cbf04560fyyou" path="res://core/utils/camera.gd" id="6_jv18n"]
 [ext_resource type="Script" uid="uid://bvc8wnm4tbetm" path="res://ui/hud/hud.gd" id="7_h725n"]
@@ -19,22 +19,14 @@ script = ExtResource("1_6p5th")
 [node name="BackgroundLayer" type="Node2D" parent="World" unique_id=883696639]
 script = ExtResource("2_rokjk")
 
-[node name="ParticulasSangre" type="Node2D" parent="World" unique_id=1967974892 node_paths=PackedStringArray("chunk_manager")]
+[node name="BloodDecalManager" type="Node2D" parent="World" unique_id=1854210635]
+script = ExtResource("4_6p5th")
+
+[node name="BloodParticleSystem" type="Node2D" parent="World" unique_id=312019851 node_paths=PackedStringArray("chunk_manager")]
 script = ExtResource("3_2i4lx")
-chunk_manager = NodePath("../BloodManagerSangre")
-
-[node name="BloodManagerSangre" type="Node2D" parent="World" unique_id=1406385229]
-script = ExtResource("4_jdxhe")
-
-[node name="FloorDecals" type="Node2D" parent="World" unique_id=80115748]
-
-[node name="Gems" type="Node2D" parent="World" unique_id=1283402906]
-
-[node name="Enemies" type="Node2D" parent="World" unique_id=1087018824]
+chunk_manager = NodePath("../BloodDecalManager")
 
 [node name="Projectiles" type="Node2D" parent="World" unique_id=1478964526 groups=["projectiles"]]
-
-[node name="EnemyProjectiles" type="Node2D" parent="World" unique_id=1398668444]
 
 [node name="Player" parent="World" unique_id=1871687937 instance=ExtResource("5_876sc")]
 
@@ -66,10 +58,8 @@ mouse_filter = 2
 script = ExtResource("8_c5pgr")
 metadata/_edit_use_anchors_ = true
 
-[node name="Particles" type="Node2D" parent="." unique_id=1261640654]
+[node name="SpawnManager" type="Node2D" parent="." unique_id=1107055362]
+script = ExtResource("10_ooudo")
 
 [node name="EnemyManager" type="Node2D" parent="." unique_id=1549364374]
 script = ExtResource("9_rgnag")
-
-[node name="SpawnManager" type="Node2D" parent="." unique_id=1107055362]
-script = ExtResource("10_ooudo")

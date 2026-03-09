@@ -345,12 +345,6 @@ func _draw_weapon_indicator() -> void:
 		_text(str(i + 1), Vector2(sx + 6.0, base_y + 5.0), FS_SMALL,
 			  C_WHITE if is_active else C_DIM)
 
-		# Nombre corto del arma
-		var wname : String = WEAPON_NAMES.get(wtype, "ARMA")
-		var wn_w  := _str_w(wname, FS_TINY)
-		_text(wname, Vector2(sx + (SLOT_W - wn_w) * 0.5, base_y + SLOT_H - 18.0),
-			  FS_TINY, wc if is_active else C_DIM)
-
 		# Barra de recarga (solo arma activa)
 		if is_active:
 			var cd_pct := 1.0
