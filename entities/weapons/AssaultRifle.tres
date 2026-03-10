@@ -1,0 +1,25 @@
+[gd_resource type="Resource" script_class="WeaponData" format=3 uid="uid://dqhseeb7i0d0h"]
+
+[ext_resource type="Script" uid="uid://bicdaci6tavf0" path="res://entities/weapons/weapon_data.gd" id="1_i7voh"]
+[ext_resource type="PackedScene" uid="uid://lanew2n6j2j" path="res://entities/projectiles/proyectile.tscn" id="1_w8wit"]
+
+[resource]
+script = ExtResource("1_i7voh")
+weapon_name = "Rifle de asalto"
+crosshair_type = 4
+damage = 20.0
+cooldown = 8.0
+projectile_speed = 20.0
+projectile_speed_max = 20.0
+max_lifetime = 60.0
+base_spread = 0.05
+max_spread = 0.35
+spread_per_shot = 0.04
+spread_recovery = 0.01
+kickback = 0.5
+shake_amount = 2.0
+projectile_color = Color(1, 0.9019608, 0.3882353, 1)
+inner_color = Color(1, 1, 0.9019608, 1)
+inner_radius_mult = 0.4
+projectile_scene = ExtResource("1_w8wit")
+metadata/_custom_type_script = "uid://bicdaci6tavf0"

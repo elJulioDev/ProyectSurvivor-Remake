@@ -78,16 +78,20 @@ var aim_angle           : float = 0.0
 var _invuln_timer       : float = 0.0
 var _damage_flash_timer : float = 0.0
 
-@onready var _weapon_pivot: Node2D = get_node_or_null("WeaponPivot")
-
 # ── Sistema de Armas ──────────────────────────────────────────────
-## Referencia a active_weapons desde HUD (alias de weapons)
-var weapons : Array[Node2D] :
-	get: return active_weapons
-var active_weapons  : Array[Node2D] = []
-var passive_weapons : Array[Node2D] = []
+# Alias para que tu script hud.gd no se rompa
+var weapons : Array :
+	get: 
+		if has_node("WeaponPivot/WeaponController"):
+			return $WeaponPivot/WeaponController.equipped_weapons
+		return []
+
 var unlocked_weapon_names : Array[String] = []
 var current_weapon_index  : int = 0
+
+@onready var _weapon_pivot: Node2D = get_node_or_null("WeaponPivot")
+@onready var _weapon_controller: Node2D = get_node_or_null("WeaponPivot/WeaponController") 
+# Ajusta la ruta de WeaponController si lo pusiste como hijo directo del Player y no del WeaponPivot.
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #  CICLO PRINCIPAL
@@ -95,12 +99,12 @@ var current_weapon_index  : int = 0
 
 func _ready() -> void:
 	add_to_group("player")
-	# Auto-equipar pistola para poder testear sin upgrades
-	add_weapon("PistolWeapon")
-	add_weapon("Shotgunweapon")
-	add_weapon("Assaultrifleweapon")
-	add_weapon("Laserweapon")
-	add_weapon("Sniperweapon")
+	# Asegúrate de haber creado estos archivos .tres en la carpeta entities/weapons/
+	add_weapon("Pistol")
+	add_weapon("Shotgun")
+	add_weapon("AssaultRifle") 
+	add_weapon("Sniper")
+	add_weapon("Laser")
 
 func _physics_process(delta: float) -> void:
 	if not is_alive:
@@ -114,7 +118,6 @@ func _physics_process(delta: float) -> void:
 	_handle_movement(delta)
 	_clamp_to_world()
 	move_and_slide()
-	_process_weapons(delta)
 
 	# Disparo con click izquierdo
 	if Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
@@ -290,62 +293,33 @@ func _unhandled_key_input(event: InputEvent) -> void:
 			KEY_7: _switch_weapon(6)
 
 func _switch_weapon(index: int) -> void:
-	if index < active_weapons.size():
+	if _weapon_controller and index < _weapon_controller.equipped_weapons.size():
 		current_weapon_index = index
 
-func _process_weapons(delta: float) -> void:
-	for w in active_weapons:
-		if w.has_method("update_weapon"):
-			w.update_weapon(delta)
-	for pw in passive_weapons:
-		if pw.has_method("update_weapon"):
-			pw.update_weapon(delta)
-		if pw.has_method("auto_shoot"):
-			pw.auto_shoot(delta)
-
 func attack() -> bool:
-	if not is_alive or dash_active or active_weapons.is_empty():
+	if not is_alive or dash_active:
 		return false
-	if current_weapon_index >= active_weapons.size():
-		current_weapon_index = 0
-	var w = active_weapons[current_weapon_index]
-	if w.has_method("shoot"):
-		return w.shoot()
+	if _weapon_controller:
+		return _weapon_controller.attempt_shoot(current_weapon_index)
 	return false
 
-func add_weapon(weapon_class_name: String) -> void:
-	if weapon_class_name in unlocked_weapon_names:
+func add_weapon(weapon_file_name: String) -> void:
+	if weapon_file_name in unlocked_weapon_names:
 		return
 
-	# Buscar el script en la carpeta de armas
-	var path := "res://entities/weapons/%s.gd" % weapon_class_name
+	# Ahora buscamos el archivo .tres en lugar del .gd
+	var path := "res://entities/weapons/%s.tres" % weapon_file_name
 	if not ResourceLoader.exists(path):
-		push_warning("add_weapon: no se encontró %s en la ruta %s" % [weapon_class_name, path])
+		push_warning("add_weapon: no se encontró recurso de arma en %s" % path)
 		return
 
-	var script_res = load(path)
-	var weapon_node = script_res.new() 
-	weapon_node.name = weapon_class_name
-	if "owner_player" in weapon_node:
-		weapon_node.owner_player = self
-
-	weapon_node.name = weapon_class_name	
-	# Solo asigna el jugador si el arma tiene la variable "owner_player"
-	if "owner_player" in weapon_node:
-		weapon_node.owner_player = self
-
-	if is_instance_valid(_weapon_pivot):
-		_weapon_pivot.add_child(weapon_node)
+	var weapon_res: WeaponData = load(path)
+	
+	if _weapon_controller:
+		_weapon_controller.add_weapon(weapon_res)
+		unlocked_weapon_names.append(weapon_file_name)
 	else:
-		add_child(weapon_node)
-
-	unlocked_weapon_names.append(weapon_class_name)
-
-	var passive_list := ["NovaWeapon", "OrbitalWeapon", "BoomerangWeapon"]
-	if weapon_class_name in passive_list:
-		passive_weapons.append(weapon_node)
-	else:
-		active_weapons.append(weapon_node)
+		push_error("Error: Player no tiene un nodo WeaponController!")
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #  DIBUJO

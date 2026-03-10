@@ -1,6 +1,7 @@
 [gd_scene format=3 uid="uid://j1e488b6hoow"]
 
 [ext_resource type="Script" uid="uid://byo7as7cyj06x" path="res://entities/player/player.gd" id="1_merdl"]
+[ext_resource type="Script" uid="uid://fdwfdl5n7fa8" path="res://entities/weapons/weapon_controller.gd" id="2_bls4j"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_0wfyh"]
 
@@ -10,6 +11,9 @@ script = ExtResource("1_merdl")
 [node name="DrawNode" type="Node2D" parent="." unique_id=762626274]
 
 [node name="WeaponPivot" type="Node2D" parent="." unique_id=1308338523]
+
+[node name="WeaponController" type="Node2D" parent="WeaponPivot" unique_id=362908871]
+script = ExtResource("2_bls4j")
 
 [node name="HealthBar" type="Node2D" parent="." unique_id=1370185272]
 

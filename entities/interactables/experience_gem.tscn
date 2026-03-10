@@ -2,5 +2,5 @@
 
 [ext_resource type="Script" uid="uid://bqtdig65trff5" path="res://entities/interactables/experience_gem.gd" id="1_6yobu"]
 
-[node name="ExperienceGem" type="Node2D" unique_id=1779385908]
+[node name="ExperienceGem" type="Node2D" unique_id=1779385908 groups=["gems"]]
 script = ExtResource("1_6yobu")

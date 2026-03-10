@@ -1,0 +1,15 @@
+[gd_scene format=3 uid="uid://c770a2dvki4n5"]
+
+[ext_resource type="Script" uid="uid://b5u4bj0gpuu2m" path="res://scenes/debug_panel.gd" id="1_7of2g"]
+
+[node name="DebugPanel" type="CanvasLayer" unique_id=2021326071]
+layer = 10
+script = ExtResource("1_7of2g")
+
+[node name="MarginContainer" type="MarginContainer" parent="." unique_id=2138141980]
+offset_top = 120.0
+offset_right = 40.0
+offset_bottom = 160.0
+
+[node name="Label" type="Label" parent="MarginContainer" unique_id=1623423215]
+layout_mode = 2

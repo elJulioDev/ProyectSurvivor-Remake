@@ -254,11 +254,11 @@ func _check_requires(req) -> bool:
 		"ninja_dash_ready":
 			return bool(_player.dash_unlocked) \
 				and _player.upgrade_counts.get("dash_cooldown", 0) >= 3
-		"orbital_unlocked":
-			for w in _player.passive_weapons:
-				if w is OrbitalWeapon:
-					return true
-			return false
+		#"orbital_unlocked":
+		#	for w in _player.passive_weapons:
+		#		if w is OrbitalWeapon:
+		#			return true
+		#	return false
 	# Comprobación genérica de atributo
 	if req in _player:
 		return bool(_player.get(req))
@@ -304,8 +304,8 @@ func _apply_upgrade(key: String) -> void:
 		"weapon":
 			_apply_weapon_stat(upg["stat_name"], upg["value"])
 
-		"orbital":
-			_apply_orbital(upg["stat_name"], upg["value"])
+		#"orbital":
+			#_apply_orbital(upg["stat_name"], upg["value"])
 
 		"xp":
 			_apply_xp_stat(upg["stat_name"], upg["value"])
@@ -364,15 +364,15 @@ func _apply_weapon_stat(sname: String, val) -> void:
 		"projectile_size_mult":  _player.projectile_size_mult  *= val
 		"knockback_mult":        _player.knockback_mult        *= val
 
-func _apply_orbital(sname: String, val) -> void:
-	for w in _player.passive_weapons:
-		if w is OrbitalWeapon:
-			match sname:
-				"orbital_add_orb":  w.add_orb()
-				"orbital_speed":    w.increase_speed(float(val))
-				"orbital_range":    w.increase_orbit_radius(float(val))
-				"orbital_damage":   w.increase_damage_mult(float(val))
-			return
+#func _apply_orbital(sname: String, val) -> void:
+	#for w in _player.passive_weapons:
+	#	if w is OrbitalWeapon:
+	#		match sname:
+	#			"orbital_add_orb":  w.add_orb()
+	#			"orbital_speed":    w.increase_speed(float(val))
+	#			"orbital_range":    w.increase_orbit_radius(float(val))
+	#			"orbital_damage":   w.increase_damage_mult(float(val))
+	#		return
 
 func _apply_xp_stat(sname: String, val) -> void:
 	match sname:

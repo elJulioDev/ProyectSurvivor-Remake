@@ -38,14 +38,14 @@ const TYPE_DROP  : int = 1
 const TYPE_CHUNK : int = 2
 const TYPE_DRIP  : int = 3
 
-const MAX_PARTICLES       : int   = 4000
+const MAX_PARTICLES       : int   = 3000
 const STREAK_THRESHOLD_SQ : float = 5.0       # vel² > este valor → streak
 const STOP_VEL_SQ         : float = 1.5       # vel² < este → "detenida"
 const BAKE_ALPHA          : float = 0.82      # alpha con que se bake al suelo
 
 # Umbrales de auto-LOD (partículas activas)
-const LOD_CRISIS_THRESHOLD : int = 2800
-const LOD_MID_THRESHOLD    : int = 1800
+const LOD_CRISIS_THRESHOLD : int = 1500
+const LOD_MID_THRESHOLD    : int = 800
 
 # Paleta de colores
 const COL_BLOOD_RED  := Color8(160,  0,  0)
@@ -53,6 +53,7 @@ const COL_DARK_BLOOD := Color8( 80,  0,  0)
 const COL_BRIGHT_RED := Color8(220, 20, 20)
 const COL_GUTS_PINK  := Color8(180, 90,100)
 const COL_MIST_RED   := Color(0.65, 0.0, 0.0, 0.55)
+const MAX_BAKES_PER_FRAME = 15
 
 # ════════════════════════════════════════════════════════════════════
 #  EXPORTS
@@ -94,6 +95,8 @@ var _tex_square : ImageTexture
 var _bake_pos   := PackedVector2Array()
 var _bake_col   := PackedColorArray()
 var _bake_size  := PackedFloat32Array()
+var _blood_calls_this_frame: int = 0
+const MAX_BLOOD_CALLS_PER_FRAME: int = 4
 
 # ════════════════════════════════════════════════════════════════════
 #  INIT
@@ -147,6 +150,7 @@ func auto_update_lod() -> void:
 # ════════════════════════════════════════════════════════════════════
 
 func _process(delta: float) -> void:
+	_blood_calls_this_frame = 0
 	auto_update_lod()
 	if active_count == 0:
 		return
@@ -196,9 +200,26 @@ func _process(delta: float) -> void:
 
 		i -= 1
 
-	# Enviar lote de bakes al chunk manager
-	if chunk_manager and _bake_pos.size() > 0:
-		chunk_manager.bake_particles_batch(_bake_pos, _bake_col, _bake_size)
+		# Limitar la cantidad de bakes que enviamos este frame
+		var bakes_to_send_pos = PackedVector2Array()
+		var bakes_to_send_col = PackedColorArray()
+		var bakes_to_send_size = PackedFloat32Array()
+
+		var count_to_bake = min(_bake_pos.size(), MAX_BAKES_PER_FRAME)
+		
+		for j in range(count_to_bake):
+			bakes_to_send_pos.append(_bake_pos[j])
+			bakes_to_send_col.append(_bake_col[j])
+			bakes_to_send_size.append(_bake_size[j])
+
+		if chunk_manager and bakes_to_send_pos.size() > 0:
+			chunk_manager.bake_particles_batch(bakes_to_send_pos, bakes_to_send_col, bakes_to_send_size)
+
+		# Eliminar los que ya se enviaron, dejando el resto para el siguiente frame
+		var remaining = _bake_pos.size() - count_to_bake
+		_bake_pos = _bake_pos.slice(count_to_bake, count_to_bake + remaining)
+		_bake_col = _bake_col.slice(count_to_bake, count_to_bake + remaining)
+		_bake_size = _bake_size.slice(count_to_bake, count_to_bake + remaining)
 
 	queue_redraw()
 
@@ -210,18 +231,28 @@ func _draw() -> void:
 	if active_count == 0:
 		return
 
-	# Separar en dos passes: FLOOR (DROP detenido) y AIR (resto)
-	# Para top-down 2D, renderizamos todo en un solo pass aquí
-	# Los chunks (TYPE_DROP detenidos) ya se bakearon, así que
-	# aquí solo vemos partículas en movimiento.
+	# Calcular el rectángulo visible de la cámara con un margen
+	var cam := get_viewport().get_camera_2d()
+	var cull_rect := Rect2()
+	if cam:
+		var zoom_factor := cam.zoom
+		var vp_size := get_viewport_rect().size / zoom_factor
+		var cam_pos := cam.get_screen_center_position()
+		# Expandimos el rect un poco para que no desaparezcan partículas en los bordes
+		cull_rect = Rect2(cam_pos - vp_size * 0.5, vp_size).grow(100.0)
 
 	for i in range(active_count):
+		var pos   := p_pos[i]
+		
+		# CULLING: Si la partícula no está en pantalla, saltamos el render
+		if cam and not cull_rect.has_point(pos):
+			continue
+
 		var life_ratio := p_life[i] / maxf(1.0, p_max_life[i])
 		if life_ratio <= 0.0:
 			continue
 
 		var ptype := int(p_type[i])
-		var pos   := p_pos[i]
 		var vel   := p_vel[i]
 		var sz    := p_size[i]
 		var col   := p_color[i]
@@ -346,12 +377,22 @@ func _remove(i: int) -> void:
 func create_blood_splatter(
 	pos:              Vector2,
 	direction_vector: Vector2 = Vector2.ZERO,
-	force:            float   = 1.5, # Fuerza base aumentada
+	force:            float   = 1.5,
 	count:            int     = 12,
 	damage_ratio:     float   = 0.5
 ) -> void:
-	if quality == 0:
+	if _blood_calls_this_frame >= MAX_BLOOD_CALLS_PER_FRAME:
 		return
+	_blood_calls_this_frame += 1
+	if quality == 0 or active_count >= MAX_PARTICLES:
+		return
+
+	# LIMITADOR DINÁMICO: Mientras más partículas hay, menos nacen
+	var load_factor := float(active_count) / float(MAX_PARTICLES)
+	var spawn_multiplier := clampf(1.0 - load_factor, 0.1, 1.0) # Reduce hasta el 10%
+	
+	count = int(count * spawn_multiplier)
+	if count <= 0: return # Saltamos si estamos muy saturados
 
 	var intensity := clampf(damage_ratio, 0.2, 1.0)
 	var mist_count : int
@@ -424,7 +465,6 @@ func create_blood_drip(pos: Vector2, intensity: float = 1.0) -> void:
 ## NO genera partículas en vuelo — va directo al ChunkManager.
 func create_blood_pool(pos: Vector2, radius_mult: float = 1.0) -> void:
 	if not chunk_manager:
-		# Fallback: partículas DROP estáticas si no hay chunk manager
 		_create_pool_particles(pos, radius_mult)
 		return
 
@@ -433,10 +473,6 @@ func create_blood_pool(pos: Vector2, radius_mult: float = 1.0) -> void:
 		2: blobs = randi_range(6, 10)
 		1: blobs = randi_range(3, 5)
 		_: blobs = randi_range(1, 2)
-
-	var pos_arr  := PackedVector2Array()
-	var col_arr  := PackedColorArray()
-	var size_arr := PackedFloat32Array()
 
 	for _i in range(blobs):
 		var offset_dist: float = randf_range(0.0, 18.0 * radius_mult) if blobs > 1 else 0.0
@@ -449,11 +485,10 @@ func create_blood_pool(pos: Vector2, radius_mult: float = 1.0) -> void:
 			1: sz = randf_range(24.0, 48.0 * radius_mult)
 			_: sz = randf_range(20.0, 32.0)
 
-		pos_arr.append(blob_pos)
-		col_arr.append(COL_DARK_BLOOD)
-		size_arr.append(sz)
-
-	chunk_manager.bake_particles_batch(pos_arr, col_arr, size_arr)
+        # En lugar de mandarlo al chunk_manager directo, lo encolamos:
+		_bake_pos.append(blob_pos)
+		_bake_col.append(COL_DARK_BLOOD)
+		_bake_size.append(sz)
 
 func _create_pool_particles(pos: Vector2, radius_mult: float) -> void:
 	var blobs: int = randi_range(3, 6) if quality == 2 else 2

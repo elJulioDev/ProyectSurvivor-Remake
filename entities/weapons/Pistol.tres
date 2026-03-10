@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="WeaponData" format=3 uid="uid://cjlunwl7rucau"]
+
+[ext_resource type="Script" uid="uid://bicdaci6tavf0" path="res://entities/weapons/weapon_data.gd" id="1_0ati4"]
+[ext_resource type="PackedScene" uid="uid://lanew2n6j2j" path="res://entities/projectiles/proyectile.tscn" id="1_ees2n"]
+
+[resource]
+script = ExtResource("1_0ati4")
+weapon_name = "Pistola"
+crosshair_type = 0
+damage = 12.0
+cooldown = 12.0
+projectile_speed = 16.0
+projectile_speed_max = 16.0
+max_lifetime = 120.0
+shake_amount = 2.0
+projectile_radius = 6.0
+projectile_scene = ExtResource("1_ees2n")
+metadata/_custom_type_script = "uid://bicdaci6tavf0"
