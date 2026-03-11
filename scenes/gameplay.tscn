@@ -1,8 +1,8 @@
 [gd_scene format=3 uid="uid://daig871mpycsa"]
 
-[ext_resource type="Script" uid="uid://lbco4d7tvpgt" path="res://levels/gameplay.gd" id="1_6p5th"]
+[ext_resource type="Script" uid="uid://lbco4d7tvpgt" path="res://scenes/gameplay.gd" id="1_6p5th"]
 [ext_resource type="PackedScene" uid="uid://d3cjcy6kne4vt" path="res://entities/interactables/experience_gem.tscn" id="2_2i4lx"]
-[ext_resource type="Script" uid="uid://cudqalr7suo7i" path="res://levels/world/background_layer.gd" id="2_rokjk"]
+[ext_resource type="Script" uid="uid://cudqalr7suo7i" path="res://core/world/background_layer.gd" id="2_rokjk"]
 [ext_resource type="Script" uid="uid://v20cksyl2rbp" path="res://core/utils/blood_particle_system.gd" id="3_2i4lx"]
 [ext_resource type="Script" uid="uid://byirda0kq0kow" path="res://core/managers/blood_decal_manager.gd" id="4_6p5th"]
 [ext_resource type="PackedScene" uid="uid://j1e488b6hoow" path="res://entities/player/player.tscn" id="5_876sc"]

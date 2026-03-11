@@ -5,7 +5,7 @@ extends Node2D
 ##  Port de src/scenes/menu.py (Pygame) a Godot 4
 ##
 ##  Sin nodos hijos requeridos — todo se dibuja con _draw().
-##  Compatible con el sistema de escenas de levels/Main.gd.
+##  Compatible con el sistema de escenas de scenes/Main.gd.
 ## ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 # ── Paleta ────────────────────────────────────────────────────────
@@ -193,7 +193,7 @@ func _unhandled_input(event: InputEvent) -> void:
 				get_tree().quit()
 
 func _go_play() -> void:
-	GameManager.goto_scene("res://levels/gameplay.tscn", {})
+	GameManager.goto_scene("res://scenes/gameplay.tscn", {})
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #  DIBUJO PRINCIPAL
