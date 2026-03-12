@@ -46,9 +46,7 @@ const UPGRADES: Dictionary = {
 	},
 	'ninja_dash': {
 		'name': 'Artes Oscuras',
-		'desc': (
-            'El Dash atraviesa y MATA INSTANTANEAMENTE a los zombies en tu camino. Requiere Dash desbloqueado y Carga Rapida al maximo.'
-		),
+		'desc': 'El Dash atraviesa y MATA INSTANTANEAMENTE a los zombies en tu camino. Requiere Dash desbloqueado y Carga Rapida al maximo.',
 		'type': 'stat',
 		'stat_name': 'ninja_dash',
 		'value': true,
@@ -58,7 +56,7 @@ const UPGRADES: Dictionary = {
 		'category': 'movement',
 	},
 
-	# SUPERVIVENCIA (nerfed para mejor balance)
+	# SUPERVIVENCIA
 	'health': {
 		'name': 'Vitalidad',
 		'desc': '+25 HP maximo. Maximo 6 stacks (+150 HP total).',
@@ -139,9 +137,7 @@ const UPGRADES: Dictionary = {
 	# AURA DE ESPINAS
 	'aura_espinas': {
 		'name': 'Aura de Espinas',
-		'desc': (
-            'Genera un campo de energia violeta que inflige 12 DPS a todos los zombies cercanos. Radio base: 80px.'
-		),
+		'desc': 'Genera un campo de energia violeta que inflige 12 DPS a todos los zombies cercanos. Radio base: 80px.',
 		'type': 'stat',
 		'stat_name': 'aura_damage',
 		'value': 12.0,
@@ -175,9 +171,7 @@ const UPGRADES: Dictionary = {
 	},
 	'aura_knockback': {
 		'name': 'Aura Repulsora',
-		'desc': (
-            'El Aura emite un PULSO cada 4 segundos que lanza a los enemigos violentamente hacia afuera. Evita que se estanquen en el limite del campo.'
-		),
+		'desc': 'El Aura emite un PULSO cada 4 segundos que lanza a los enemigos violentamente hacia afuera.',
 		'type': 'stat',
 		'stat_name': 'aura_knockback',
 		'value': 1.8,
@@ -188,12 +182,10 @@ const UPGRADES: Dictionary = {
 	},
 	'aura_pulse_rapido': {
 		'name': 'Pulso Acelerado',
-		'desc': (
-            'Reduce en 1s el intervalo del Pulso Repulsor del Aura. Maximo 3 stacks (de 4s → 1s entre pulsos).'
-		),
+		'desc': 'Reduce en 1s el intervalo del Pulso Repulsor del Aura. Maximo 3 stacks (de 4s a 1s entre pulsos).',
 		'type': 'stat',
 		'stat_name': 'aura_knockback_interval',
-		'value': -1.0,          # resta 1 segundo al intervalo
+		'value': -1.0,
 		'stackable': true,
 		'max_stacks': 3,
 		'requires': 'aura_knockback_unlocked',
@@ -289,12 +281,12 @@ const UPGRADES: Dictionary = {
 		'category': 'weapons',
 	},
 
-	# ARMAS — DESBLOQUEOS
+	# ARMAS — DESBLOQUEOS (solo armas activas)
 	'unlock_shotgun': {
 		'name': 'Escopeta',
 		'desc': 'Desbloquea la escopeta (Tecla 2). 8 perdigones, devastadora a corto rango.',
 		'type': 'unlock_weapon',
-		'weapon_class': 'ShotgunWeapon',
+		'weapon_class': 'Shotgun',
 		'rarity': 'rare',
 		'category': 'weapons',
 	},
@@ -302,7 +294,7 @@ const UPGRADES: Dictionary = {
 		'name': 'Rifle de Asalto',
 		'desc': 'Desbloquea el rifle (Tecla 3). Alta cadencia y buen daño sostenido.',
 		'type': 'unlock_weapon',
-		'weapon_class': 'AssaultRifleWeapon',
+		'weapon_class': 'AssaultRifle',
 		'rarity': 'rare',
 		'category': 'weapons',
 	},
@@ -310,100 +302,16 @@ const UPGRADES: Dictionary = {
 		'name': 'Laser de Plasma',
 		'desc': 'Desbloquea el laser (Tecla 4). Daño continuo masivo en linea recta.',
 		'type': 'unlock_weapon',
-		'weapon_class': 'LaserWeapon',
+		'weapon_class': 'Laser',
 		'rarity': 'legendary',
 		'category': 'weapons',
 	},
 	'unlock_sniper': {
 		'name': 'Rifle de Caza',
-		'desc': (
-            'Desbloquea el Francotirador (Tecla 5). Maxima penetracion (8 zombies), 110 de daño por disparo.'
-		),
+		'desc': 'Desbloquea el Francotirador (Tecla 5). Maxima penetracion (8 zombies), 110 de daño por disparo.',
 		'type': 'unlock_weapon',
-		'weapon_class': 'SniperWeapon',
+		'weapon_class': 'Sniper',
 		'rarity': 'epic',
-		'category': 'weapons',
-	},
-	'unlock_nova': {
-		'name': 'Nova de Espinas',
-		'desc': (
-            'Auto-disparo cada 3s: 8 proyectiles en TODAS las direcciones con penetracion infinita. Limpia la pantalla entera sin apuntar.'
-		),
-		'type': 'unlock_weapon',
-		'weapon_class': 'NovaWeapon',
-		'rarity': 'rare',
-		'category': 'weapons',
-	},
-	'unlock_orbital': {
-		'name': 'Orbe Orbital',
-		'desc': (
-            '1 orbe girando a tu alrededor constantemente. Daño por contacto + retroceso. Mejora con upgrades de Orbital.'
-		),
-		'type': 'unlock_weapon',
-		'weapon_class': 'OrbitalWeapon',
-		'rarity': 'epic',
-		'category': 'weapons',
-	},
-	'unlock_boomerang': {
-		'name': 'Boomerang Arcano',
-		'desc': (
-            'Lanza un proyectil que perfora infinitamente, da la vuelta y regresa danando de nuevo.'
-		),
-		'type': 'unlock_weapon',
-		'weapon_class': 'BoomerangWeapon',
-		'rarity': 'rare',
-		'category': 'weapons',
-	},
-
-	# ORBES ORBITALES — MEJORAS (requieren unlock_orbital)
-	'orbital_add_orb': {
-		'name': 'Orbe Extra',
-		'desc': (
-            'Añade un orbe orbital adicional. Maximo 4 orbes en total. Mas cobertura, mas presion sobre los enemigos cercanos.'
-		),
-		'type': 'orbital',
-		'stat_name': 'orbital_add_orb',
-		'value': 1,
-		'stackable': true,
-		'max_stacks': 3,
-		'requires': 'orbital_unlocked',
-		'rarity': 'rare',
-		'category': 'weapons',
-	},
-	'orbital_speed': {
-		'name': 'Orbita Acelerada',
-		'desc': '+40% velocidad de rotacion de los orbes. Mas dificil de evadir.',
-		'type': 'orbital',
-		'stat_name': 'orbital_speed',
-		'value': 1.4,
-		'stackable': true,
-		'max_stacks': 3,
-		'requires': 'orbital_unlocked',
-		'rarity': 'uncommon',
-		'category': 'weapons',
-	},
-	'orbital_range': {
-		'name': 'Orbita Expandida',
-		'desc': '+25px al radio orbital. Cubre mas area y protege de mas enemigos.',
-		'type': 'orbital',
-		'stat_name': 'orbital_range',
-		'value': 25.0,
-		'stackable': true,
-		'max_stacks': 3,
-		'requires': 'orbital_unlocked',
-		'rarity': 'uncommon',
-		'category': 'weapons',
-	},
-	'orbital_damage': {
-		'name': 'Orbes Cargados',
-		'desc': '+50% daño de los orbes orbitales.',
-		'type': 'orbital',
-		'stat_name': 'orbital_damage',
-		'value': 1.5,
-		'stackable': true,
-		'max_stacks': 3,
-		'requires': 'orbital_unlocked',
-		'rarity': 'rare',
 		'category': 'weapons',
 	},
 

@@ -6,6 +6,7 @@ var penetration: int = 1
 var max_lifetime: float = 35.0
 var lifetime: float = 0.0
 var radius: float = 6.0
+var knockback_mult: float = 1.0   # Seteado por WeaponController según player.knockback_mult
 var _hit_ids: Dictionary = {}
 
 var _prev_pos: Vector2 = Vector2.ZERO
@@ -25,7 +26,7 @@ func setup(angle: float, speed: float, calc_dmg: int, calc_pen: int, weapon_data
 	penetration = calc_pen
 	max_lifetime = weapon_data.max_lifetime
 	radius = final_rad
-	
+
 	_use_swept = weapon_data.use_swept_collision
 	_color = weapon_data.projectile_color
 	_inner_color = weapon_data.inner_color
@@ -33,7 +34,7 @@ func setup(angle: float, speed: float, calc_dmg: int, calc_pen: int, weapon_data
 	_fade_out = weapon_data.fade_out
 	_fade_mult = weapon_data.fade_multiplier
 	_flicker = weapon_data.flicker_fire_effect
-	
+
 	_prev_pos = global_position
 
 func _process(delta: float) -> void:
@@ -41,7 +42,7 @@ func _process(delta: float) -> void:
 	global_position += velocity * delta
 	lifetime += delta * 60.0
 	queue_redraw()
-	
+
 	if lifetime >= max_lifetime:
 		queue_free()
 		return
@@ -56,13 +57,13 @@ func _check_hit_normal() -> void:
 	for idx in hits:
 		if _hit_ids.has(idx): continue
 		_hit_ids[idx] = true
-		GameManager.enemy_manager.damage_enemy(idx, damage, velocity.normalized(), 8.0)
+		GameManager.enemy_manager.damage_enemy(
+			idx, damage, velocity.normalized(), 8.0 * knockback_mult)
 		penetration -= 1
 		if penetration <= 0:
 			queue_free()
 			return
 
-# LA FÍSICA PERFECTA DE TU SNIPER
 func _check_hit_swept() -> void:
 	var mid := (_prev_pos + global_position) * 0.5
 	var seg_len := global_position.distance_to(_prev_pos)
@@ -73,7 +74,8 @@ func _check_hit_swept() -> void:
 		var d := _point_to_segment_dist(enemy_pos, _prev_pos, global_position)
 		if d <= radius + 14.0:
 			_hit_ids[idx] = true
-			GameManager.enemy_manager.damage_enemy(idx, damage, velocity.normalized(), 12.0)
+			GameManager.enemy_manager.damage_enemy(
+				idx, damage, velocity.normalized(), 12.0 * knockback_mult)
 			penetration -= 1
 			if penetration <= 0:
 				queue_free()
@@ -91,13 +93,13 @@ func _draw() -> void:
 	if _fade_out:
 		var progress: float = 1.0 - (lifetime / max_lifetime)
 		current_alpha = clampf(progress * _fade_mult, 0.0, 1.0)
-	
+
 	var main_c = _color
 	main_c.a *= current_alpha
-	
+
 	if _flicker:
 		main_c = Color(1.0, float(randi_range(100, 150)) / 255.0, 0.0, current_alpha)
-	
+
 	draw_circle(Vector2.ZERO, radius, main_c)
 	if _inner_mult > 0.0:
 		var inner_c = _inner_color

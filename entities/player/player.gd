@@ -47,21 +47,27 @@ var xp_mult          : float = 1.0
 var magnet_range_mult: float = 1.0
 var magnet_speed_mult: float = 1.0
 var xp_on_kill_bonus : int   = 0
+
+# ── Aura de Espinas ───────────────────────────────────────────────
 var aura_damage      : float = 0.0
 var aura_radius      : float = 80.0
 var aura_knockback   : float = 0.0
 var aura_knockback_interval: float = 4.0
+
+# ── Armas ─────────────────────────────────────────────────────────
 var global_damage_mult    : float = 1.0
 var global_cooldown_mult  : float = 1.0
 var projectile_speed_mult : float = 1.0
 var projectile_size_mult  : float = 1.0
 var extra_penetration     : int   = 0
 var knockback_mult        : float = 1.0
-var lifesteal_chance      : float = 0.0
-var lifesteal             : float = 5.0
+
+# ── Supervivencia ─────────────────────────────────────────────────
+var lifesteal_chance : float = 0.0
+var lifesteal        : float = 5.0
 
 # ── Estado interno ────────────────────────────────────────────────
-var dash_unlocked      : bool  = true
+var dash_unlocked      : bool  = false   # bloqueado al inicio
 var dash_active        : bool  = false
 var dash_duration_mult : float = 1.0
 var dash_cooldown_mult : float = 1.0
@@ -78,10 +84,13 @@ var aim_angle           : float = 0.0
 var _invuln_timer       : float = 0.0
 var _damage_flash_timer : float = 0.0
 
+# ── Aura — timers internos ────────────────────────────────────────
+var _aura_pulse_timer : float = 0.0
+var _aura_vis_timer   : float = 0.0
+
 # ── Sistema de Armas ──────────────────────────────────────────────
-# Alias para que tu script hud.gd no se rompa
 var weapons : Array :
-	get: 
+	get:
 		if has_node("WeaponPivot/WeaponController"):
 			return $WeaponPivot/WeaponController.equipped_weapons
 		return []
@@ -90,8 +99,7 @@ var unlocked_weapon_names : Array[String] = []
 var current_weapon_index  : int = 0
 
 @onready var _weapon_pivot: Node2D = get_node_or_null("WeaponPivot")
-@onready var _weapon_controller: Node2D = get_node_or_null("WeaponPivot/WeaponController") 
-# Ajusta la ruta de WeaponController si lo pusiste como hijo directo del Player y no del WeaponPivot.
+@onready var _weapon_controller: Node2D = get_node_or_null("WeaponPivot/WeaponController")
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #  CICLO PRINCIPAL
@@ -99,12 +107,8 @@ var current_weapon_index  : int = 0
 
 func _ready() -> void:
 	add_to_group("player")
-	# Asegúrate de haber creado estos archivos .tres en la carpeta entities/weapons/
+	# Solo la pistola al inicio; las demás se desbloquean con upgrades
 	add_weapon("Pistol")
-	add_weapon("Shotgun")
-	add_weapon("AssaultRifle") 
-	add_weapon("Sniper")
-	add_weapon("Laser")
 
 func _physics_process(delta: float) -> void:
 	if not is_alive:
@@ -116,13 +120,14 @@ func _physics_process(delta: float) -> void:
 	_update_aim()
 	_update_timers(delta)
 	_handle_movement(delta)
+	_process_aura(delta)
 	_clamp_to_world()
 	move_and_slide()
 
-	# Disparo con click izquierdo
 	if Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
 		attack()
 
+	_aura_vis_timer += delta
 	queue_redraw()
 
 # ── Apuntado ──────────────────────────────────────────────────────
@@ -176,7 +181,18 @@ func _handle_movement(delta: float) -> void:
 		else:
 			_ghost_positions.pop_front()
 			_ghost_positions.append({"pos": global_position, "angle": aim_angle})
+
 		velocity = _dash_dir * DASH_SPEED
+
+		# Ninja Dash: eliminar enemigos al contacto durante el dash
+		if ninja_dash and is_instance_valid(GameManager.enemy_manager):
+			var hits = GameManager.enemy_manager.get_enemies_near_proxy(
+				global_position, float(PLAYER_SIZE) * 1.5)
+			for idx in hits:
+				if not _ninja_hit_ids.has(idx):
+					_ninja_hit_ids[idx] = true
+					GameManager.enemy_manager.damage_enemy(
+						idx, 99999.0, _dash_dir, 0.0)
 		return
 
 	var input_dir := Vector2.ZERO
@@ -202,8 +218,43 @@ func _handle_movement(delta: float) -> void:
 
 func _clamp_to_world() -> void:
 	var half := float(PLAYER_SIZE) * 0.5
-	global_position.x = clampf(global_position.x, half, GameManager.WORLD_WIDTH - half)
+	global_position.x = clampf(global_position.x, half, GameManager.WORLD_WIDTH  - half)
 	global_position.y = clampf(global_position.y, half, GameManager.WORLD_HEIGHT - half)
+
+# ── Aura de Espinas ───────────────────────────────────────────────
+
+func _process_aura(delta: float) -> void:
+	if aura_damage <= 0.0:
+		return
+	if not is_instance_valid(GameManager.enemy_manager):
+		return
+
+	# DPS continuo
+	var enemies_in_range = GameManager.enemy_manager.get_enemies_near_proxy(
+		global_position, aura_radius)
+
+	for idx in enemies_in_range:
+		GameManager.enemy_manager.damage_enemy(
+			idx, aura_damage * delta, Vector2.ZERO, 0.0)
+
+	# Pulso de knockback periódico
+	if aura_knockback > 0.0:
+		_aura_pulse_timer += delta
+		if _aura_pulse_timer >= aura_knockback_interval:
+			_aura_pulse_timer = 0.0
+			# Re-obtener lista por si cambió durante el frame
+			var pulse_targets = GameManager.enemy_manager.get_enemies_near_proxy(
+				global_position, aura_radius)
+			for idx in pulse_targets:
+				var enemy_pos : Vector2 = GameManager.enemy_manager.positions[idx]
+				var dir := (enemy_pos - global_position)
+				if dir.length_squared() > 0.01:
+					dir = dir.normalized()
+				else:
+					dir = Vector2(randf_range(-1.0, 1.0),
+								  randf_range(-1.0, 1.0)).normalized()
+				GameManager.enemy_manager.damage_enemy(
+					idx, 0.0, dir, aura_knockback * 350.0)
 
 # ── Dash ──────────────────────────────────────────────────────────
 
@@ -307,14 +358,13 @@ func add_weapon(weapon_file_name: String) -> void:
 	if weapon_file_name in unlocked_weapon_names:
 		return
 
-	# Ahora buscamos el archivo .tres en lugar del .gd
 	var path := "res://entities/weapons/%s.tres" % weapon_file_name
 	if not ResourceLoader.exists(path):
-		push_warning("add_weapon: no se encontró recurso de arma en %s" % path)
+		push_warning("add_weapon: no se encontró recurso en %s" % path)
 		return
 
 	var weapon_res: WeaponData = load(path)
-	
+
 	if _weapon_controller:
 		_weapon_controller.add_weapon(weapon_res)
 		unlocked_weapon_names.append(weapon_file_name)
@@ -331,10 +381,26 @@ func _draw() -> void:
 
 	var half := float(PLAYER_SIZE) * 0.5
 
+	# ── Aura de Espinas ───────────────────────────────────────────
+	if aura_damage > 0.0:
+		var pulse := sin(_aura_vis_timer * 2.5) * 0.5 + 0.5
+		draw_circle(Vector2.ZERO, aura_radius,
+			Color(0.58, 0.0, 1.0, 0.06 + pulse * 0.04))
+		draw_arc(Vector2.ZERO, aura_radius, 0.0, TAU, 64,
+			Color(0.78, 0.2, 1.0, 0.25 + pulse * 0.20), 2.0)
+		# Arco de progreso del pulso de knockback
+		if aura_knockback > 0.0:
+			var pulse_progress := clampf(_aura_pulse_timer / aura_knockback_interval, 0.0, 1.0)
+			draw_arc(Vector2.ZERO, aura_radius * 0.93,
+				0.0, TAU * pulse_progress, 48,
+				Color(1.0, 0.4, 1.0, 0.55), 3.0)
+
+	# ── Parpadeo de invulnerabilidad ──────────────────────────────
 	if _invuln_timer > 0.0 and _damage_flash_timer <= 0.0:
 		if int(_invuln_timer * 60.0) % 6 < 3:
 			return
 
+	# ── Fantasmas del dash ────────────────────────────────────────
 	if dash_active and _ghost_positions.size() > 0:
 		var n := _ghost_positions.size()
 		for i in range(n):
@@ -348,11 +414,13 @@ func _draw() -> void:
 				var ghost_tip := lpos + Vector2(cos(g["angle"]), sin(g["angle"])) * half * 2.5
 				draw_line(lpos, ghost_tip, gc, 2.0)
 
+	# ── Borde ninja dash ──────────────────────────────────────────
 	if ninja_dash and dash_unlocked:
 		draw_rect(Rect2(Vector2(-half - 2.0, -half - 2.0),
 						Vector2(half * 2.0 + 4.0, half * 2.0 + 4.0)),
 				  Color(0.63, 0.0, 1.0), false, 2.0)
 
+	# ── Cuerpo ────────────────────────────────────────────────────
 	var body_color := Color.WHITE
 	if _damage_flash_timer > 0.0:
 		var t := _damage_flash_timer / DAMAGE_FLASH_SECS

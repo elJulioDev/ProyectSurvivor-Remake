@@ -242,6 +242,13 @@ func _physics_process(delta: float) -> void:
 	# 2. CULLING DE RENDERIZADO Y ACTUALIZACIÓN DE ESTADO
 	for i in range(active_count):
 		var pos = positions[i]
+
+		# Comprobamos si el enemigo está tocando al jugador
+		var dist_sq = pos.distance_squared_to(p_pos)
+		var min_dist = (sizes[i] * 0.4) + 12.0 # Ajusta el radio de colisión sumando el radio del player
+		if dist_sq < min_dist * min_dist:
+			if player.has_method("take_damage"):
+				player.take_damage(damages[i])
 		
 		# --- LÓGICA DE GOTEO DE SANGRE ACELERADA ---
 		if bleed_intensities[i] > 0.0:

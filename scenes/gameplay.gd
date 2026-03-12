@@ -94,25 +94,30 @@ func _on_enemy_killed(pos: Vector2, points: int) -> void:
 	score += points * 100
 	_drop_gems(pos, points)
 
+	# 1. Comprobar que el jugador existe y está vivo
+	if is_instance_valid(player_ref) and player_ref.is_alive:
+		
+		# 2. Lifesteal: probabilidad de curar al jugador al matar
+		if player_ref.lifesteal_chance > 0.0:
+			if randf() < player_ref.lifesteal_chance:
+				player_ref.heal(player_ref.lifesteal)
+
+		# 3. XP Directa (Mejora Coleccionista)
+		if "xp_on_kill_bonus" in player_ref and player_ref.xp_on_kill_bonus > 0:
+			player_ref.gain_experience(player_ref.xp_on_kill_bonus)
+
 func _drop_gems(pos: Vector2, points: int) -> void:
 	if not gem_scene:
 		return
 
-	# Buscar entrada en la tabla (fallback al valor más cercano)
 	var entry : Array = GEM_DROP_TABLE.get(points, [points, 0.15, 1])
 	var xp_base      : int   = entry[0]
 	var extra_prob   : float = entry[1]
 	var extra_max    : int   = entry[2]
 
-	# Ajustar XP con bonus del jugador (xp_on_kill_bonus)
-	var bonus_xp : int = 0
-	if is_instance_valid(player_ref) and "xp_on_kill_bonus" in player_ref:
-		bonus_xp = player_ref.xp_on_kill_bonus
+	# Se remueve la inyección de bonus_xp a la gema. Ahora solo da su XP base.
+	_spawn_gem(pos, xp_base)
 
-	# Gema principal (siempre se suelta)
-	_spawn_gem(pos, xp_base + bonus_xp)
-
-	# Gemas extras (probabilísticas, dan el desbordamiento visual)
 	if extra_max > 0 and randf() < extra_prob:
 		var extras : int = randi_range(1, extra_max)
 		var small_xp : int = maxi(1, int(xp_base * 0.3))
@@ -131,8 +136,6 @@ func _spawn_gem(pos: Vector2, xp: int) -> void:
 # ════════════════════════════════════════════════════════════════
 
 func _on_player_leveled_up() -> void:
-	# Si ya hay una pantalla activa, la cola de niveles se procesa
-	# al cerrar la pantalla actual (_show_upgrade_screen gestiona esto)
 	if _upgrade_active:
 		return
 	_show_upgrade_screen()
@@ -159,16 +162,13 @@ func _show_upgrade_screen() -> void:
 	upgrade_layer.add_child(upgrade_node)
 	upgrade_node.setup(player_ref)
 
-	# Callback al seleccionar una mejora
 	upgrade_node.upgrade_selected.connect(
 		func() -> void:
 			upgrade_node.queue_free()
 			player_ref.pending_level_ups -= 1
 			_upgrade_active = false
 
-			# Si subió varios niveles de golpe, mostrar otra carta
 			if player_ref.pending_level_ups > 0:
-				# Esperar un frame para que queue_free() se procese
 				await get_tree().process_frame
 				_show_upgrade_screen()
 			else:
