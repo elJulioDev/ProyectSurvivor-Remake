@@ -90,19 +90,15 @@ func _process(delta: float) -> void:
 # ════════════════════════════════════════════════════════════════
 
 ## Señal recibida desde EnemyManager cuando un enemigo muere.
-func _on_enemy_killed(pos: Vector2, points: int) -> void:
+func _on_enemy_killed(pos: Vector2, points: int, _type_id: int) -> void:
 	score += points * 100
 	_drop_gems(pos, points)
 
-	# 1. Comprobar que el jugador existe y está vivo
 	if is_instance_valid(player_ref) and player_ref.is_alive:
-		
-		# 2. Lifesteal: probabilidad de curar al jugador al matar
 		if player_ref.lifesteal_chance > 0.0:
 			if randf() < player_ref.lifesteal_chance:
 				player_ref.heal(player_ref.lifesteal)
 
-		# 3. XP Directa (Mejora Coleccionista)
 		if "xp_on_kill_bonus" in player_ref and player_ref.xp_on_kill_bonus > 0:
 			player_ref.gain_experience(player_ref.xp_on_kill_bonus)
 
@@ -173,6 +169,7 @@ func _show_upgrade_screen() -> void:
 				_show_upgrade_screen()
 			else:
 				get_tree().paused = false
+				Input.set_mouse_mode(Input.MOUSE_MODE_HIDDEN)
 	)
 
 # ════════════════════════════════════════════════════════════════

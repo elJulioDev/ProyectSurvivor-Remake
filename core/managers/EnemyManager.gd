@@ -1,7 +1,7 @@
 extends Node2D
 class_name EnemyManager
 
-signal enemy_killed(pos: Vector2, points: int)
+signal enemy_killed(pos: Vector2, points: int, type_id: int)
 
 # ════════════════════════════════════════════════════════════════════════════
 #  1. CONSTANTES Y CONFIGURACIÓN
@@ -33,7 +33,7 @@ var positions   := PackedVector2Array()
 var velocities  := PackedVector2Array()
 var knockbacks  := PackedVector2Array()
 
-var healths     := PackedFloat32Array()
+var healths       := PackedFloat32Array()
 var max_healths := PackedFloat32Array()
 var speeds      := PackedFloat32Array()
 var sizes       := PackedFloat32Array()
@@ -68,20 +68,18 @@ void fragment() {
 	int type_idx = int(round(custom_data.r));
 	vec3 base_color = enemy_colors[type_idx];
 	vec3 border_color = base_color * 0.5;
-	
 	// Como el QuadMesh invierte el eje Y en 2D:
 	// UV.y = 1.0 es la parte de ARRIBA.
 	// UV.y = 0.0 es la parte de ABAJO.
 	vec2 uv = UV - 0.5; 
 	
-	vec4 final_color = vec4(0.0); 
-	
+	vec4 final_color = vec4(0.0);
 	// 1. CUERPO DEL ENEMIGO (Perfectamente centrado)
 	// Ocupa el centro de la malla, dejando margen limpio arriba y abajo
 	if (abs(uv.x) <= 0.35 && abs(uv.y) <= 0.35) {
 		final_color = vec4(base_color, 1.0);
-		
-		if (abs(uv.x) < 0.12 && abs(uv.y) < 0.12) { final_color.rgb = border_color; }
+		if (abs(uv.x) < 0.12 && abs(uv.y) < 0.12) { final_color.rgb = border_color;
+		}
 		if (abs(uv.x) > 0.31 || abs(uv.y) > 0.31) { final_color.rgb = border_color; }
 		
 		final_color.rgb = mix(final_color.rgb, vec3(1.0), custom_data.b);
@@ -91,14 +89,14 @@ void fragment() {
 	if (UV.y > 0.88 && UV.y < 0.98 && custom_data.a > 0.5) {
 		if (UV.x > 0.15 && UV.x < 0.85) {
 			// Fondo oscuro/borde
-			final_color = vec4(0.1, 0.1, 0.1, 1.0); 
-			
+			final_color = vec4(0.1, 0.1, 0.1, 1.0);
 			// Relleno de la barra
 			if (UV.y > 0.90 && UV.y < 0.96 && UV.x > 0.17 && UV.x < 0.83) {
-				float hp_bar_x = (UV.x - 0.17) / 0.66; 
+				float hp_bar_x = (UV.x - 0.17) / 0.66;
 				if (hp_bar_x < custom_data.g) {
 					// Verde/naranja sano, rojo dañado
-					vec3 hp_col = custom_data.g < 0.3 ? vec3(1.0, 0.0, 0.0) : vec3(1.0, 0.6, 0.0);
+					vec3 hp_col = custom_data.g < 0.3 ?
+					vec3(1.0, 0.0, 0.0) : vec3(1.0, 0.6, 0.0);
 					final_color.rgb = hp_col;
 				} else {
 					// Fondo interior rojo oscuro donde falta vida
@@ -187,15 +185,40 @@ func spawn(pos: Vector2, type_name: String, speed_multiplier: float, health_mult
 	active_count += 1
 	#multimesh.visible_instance_count = active_count
 
-func teleport_distant(player_pos: Vector2) -> void:
-	var max_dist_sq = 1900.0 * 1900.0 
+func teleport_distant(player_pos: Vector2, player_vel: Vector2 = Vector2.ZERO) -> void:
+	const MAX_DIST_SQ  : float = 1900.0 * 1900.0
+	const SPAWN_R_MIN  : float = 1300.0
+	const SPAWN_R_MAX  : float = 1600.0
+	# Umbral de velocidad para activar sesgo direccional
+	const VEL_THRESHOLD_SQ : float = 400.0  # ~20 px/s
+
+	var moving   : bool    = player_vel.length_squared() > VEL_THRESHOLD_SQ
+	var fwd_ang  : float   = player_vel.angle() if moving else 0.0
+
 	for i in range(active_count):
-		if positions[i].distance_squared_to(player_pos) > max_dist_sq:
-			var angle = randf() * PI * 2.0
-			var radius = randf_range(1300.0, 1600.0) 
-			positions[i] = player_pos + Vector2(cos(angle), sin(angle)) * radius
-			velocities[i] = Vector2.ZERO
-			knockbacks[i] = Vector2.ZERO
+		if positions[i].distance_squared_to(player_pos) <= MAX_DIST_SQ:
+			continue  # está cerca, no teleportar
+
+		var angle  : float
+		if moving:
+			# Arco frontal ±90° con pequeñas variaciones hacia los lados
+			# Distribución: 60% frente, 20% lado izq, 20% lado der
+			var roll := randf()
+			if roll < 0.60:
+				angle = fwd_ang + randf_range(-PI * 0.45, PI * 0.45)
+			elif roll < 0.80:
+				angle = fwd_ang + randf_range(PI * 0.45, PI * 0.90)   # flanco derecho
+			else:
+				angle = fwd_ang + randf_range(-PI * 0.90, -PI * 0.45) # flanco izquierdo
+		else:
+			angle = randf() * TAU  # circular cuando quieto
+
+		var radius : float = randf_range(SPAWN_R_MIN, SPAWN_R_MAX)
+		positions[i] = player_pos + Vector2(cos(angle), sin(angle)) * radius
+		velocities[i] = Vector2.ZERO
+		knockbacks[i]  = Vector2.ZERO
+		# Resetear hit_flash para que no aparezca "parpadeando"
+		hit_flashes[i] = 0.0
 
 # ════════════════════════════════════════════════════════════════════════════
 #  5. LÓGICA DE MOVIMIENTO MULTI-HILO (IA Predictiva Corregida)
@@ -214,7 +237,7 @@ func _physics_process(delta: float) -> void:
 	
 	# NUEVO: Ejecutar el reciclaje de rezagados (cada medio segundo para no saturar)
 	if Engine.get_process_frames() % 30 == 0:
-		teleport_distant(p_pos)
+		teleport_distant(p_pos, p_vel)
 	
 	_build_grid()
 	
@@ -378,6 +401,28 @@ func _process_enemy_movement(i: int, delta: float, p_pos: Vector2, p_vel: Vector
 # ════════════════════════════════════════════════════════════════════════════
 #  6. SISTEMA DE DAÑO Y BÚSQUEDA ESPACIAL
 # ════════════════════════════════════════════════════════════════════════════
+
+func get_all_type_counts() -> Dictionary:
+	# IDs mapeados 1:1 con TYPES en EnemyManager
+	var counts : Dictionary = {
+		"small":    0,
+		"normal":   0,
+		"large":    0,
+		"tank":     0,
+		"exploder": 0,
+		"spitter":  0,
+	}
+	# Single pass — PackedInt32Array es muy rápido de iterar
+	for i in range(active_count):
+		match types[i]:
+			0: counts["small"]    += 1
+			1: counts["normal"]   += 1
+			2: counts["large"]    += 1
+			3: counts["tank"]     += 1
+			4: counts["exploder"] += 1
+			5: counts["spitter"]  += 1
+	return counts
+
 func get_enemies_near_proxy(pos: Vector2, radius: float) -> PackedInt32Array:
 	var result := PackedInt32Array()
 	var r2 = radius * radius
@@ -433,7 +478,7 @@ func damage_enemy(idx: int, amount: float, hit_dir: Vector2 = Vector2.ZERO, knoc
 	# if healths[idx] <= 0: _kill_enemy(idx)
 
 func _kill_enemy(idx: int) -> void:
-	enemy_killed.emit(positions[idx], points[idx])
+	enemy_killed.emit(positions[idx], points[idx], types[idx])
 	var particle_sys = get_tree().get_first_node_in_group("blood_particles")
 	if particle_sys: particle_sys.create_viscera_explosion(positions[idx], sizes[idx]/40.0)
 	active_count -= 1

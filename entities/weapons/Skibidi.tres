@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="WeaponData" format=3 uid="uid://c8vqefxrwe0jo"]
+
+[ext_resource type="Script" uid="uid://bicdaci6tavf0" path="res://entities/weapons/weapon_data.gd" id="1_5boqj"]
+[ext_resource type="PackedScene" uid="uid://lanew2n6j2j" path="res://entities/projectiles/proyectile.tscn" id="1_x74eo"]
+
+[resource]
+script = ExtResource("1_5boqj")
+crosshair_type = 2
+damage = 9999.0
+cooldown = 10.0
+projectile_speed_max = 20.0
+pellets = 8
+shotgun_spread = 0.8
+penetration = 20
+shake_amount = 0.2
+projectile_radius = 8.0
+projectile_color = Color(1, 0, 0.016666412, 1)
+fade_multiplier = 0.5
+flicker_fire_effect = true
+projectile_scene = ExtResource("1_x74eo")
+metadata/_custom_type_script = "uid://bicdaci6tavf0"
