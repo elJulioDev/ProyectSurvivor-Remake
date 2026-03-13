@@ -1,7 +1,6 @@
 [gd_scene format=3 uid="uid://daig871mpycsa"]
 
 [ext_resource type="Script" uid="uid://lbco4d7tvpgt" path="res://scenes/gameplay.gd" id="1_6p5th"]
-[ext_resource type="PackedScene" uid="uid://d3cjcy6kne4vt" path="res://entities/interactables/experience_gem.tscn" id="2_2i4lx"]
 [ext_resource type="Script" uid="uid://cudqalr7suo7i" path="res://core/world/background_layer.gd" id="2_rokjk"]
 [ext_resource type="Script" uid="uid://v20cksyl2rbp" path="res://core/utils/blood_particle_system.gd" id="3_2i4lx"]
 [ext_resource type="Script" uid="uid://byirda0kq0kow" path="res://core/managers/blood_decal_manager.gd" id="4_6p5th"]
@@ -15,7 +14,6 @@
 
 [node name="Gameplay" type="Node2D" unique_id=1330324624]
 script = ExtResource("1_6p5th")
-gem_scene = ExtResource("2_2i4lx")
 
 [node name="World" type="Node2D" parent="." unique_id=1752792137]
 
@@ -69,8 +67,8 @@ layer = 10
 [node name="SpawnManager" type="Node2D" parent="." unique_id=1107055362]
 script = ExtResource("10_ooudo")
 
-[node name="EnemyManager" type="Node2D" parent="." unique_id=1549364374]
-script = ExtResource("9_rgnag")
-
 [node name="GemManager" type="Node2D" parent="." unique_id=147622534]
 script = ExtResource("12_2i4lx")
+
+[node name="EnemyManager" type="Node2D" parent="." unique_id=1549364374]
+script = ExtResource("9_rgnag")

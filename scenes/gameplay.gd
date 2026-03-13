@@ -21,9 +21,6 @@ var player_ref: Node2D = null
 ## True mientras hay una pantalla de upgrade visible
 var _upgrade_active: bool = false
 
-# ── Escena de gema de experiencia ────────────────────────────────────
-@export var gem_scene: PackedScene
-
 # ── Tabla de drop de gemas por tipo de enemigo ───────────────────────
 ## key = points del enemigo  → [xp_base, extra_gems_prob, extra_gems_max]
 const GEM_DROP_TABLE : Dictionary = {
@@ -41,6 +38,8 @@ func _ready() -> void:
 	GameManager.enemy_manager = enemy_manager
 
 	spawn_manager.setup(enemy_manager)
+	# gem_manager.setup() ya no necesita el contenedor para spawning,
+	# pero mantenemos la llamada por compatibilidad de firma.
 	gem_manager.setup(gems_container)
 
 	enemy_manager.enemy_killed.connect(_on_enemy_killed)
@@ -103,29 +102,23 @@ func _on_enemy_killed(pos: Vector2, points: int, _type_id: int) -> void:
 			player_ref.gain_experience(player_ref.xp_on_kill_bonus)
 
 func _drop_gems(pos: Vector2, points: int) -> void:
-	if not gem_scene:
-		return
-
 	var entry : Array = GEM_DROP_TABLE.get(points, [points, 0.15, 1])
-	var xp_base      : int   = entry[0]
-	var extra_prob   : float = entry[1]
-	var extra_max    : int   = entry[2]
+	var xp_base    : int   = entry[0]
+	var extra_prob : float = entry[1]
+	var extra_max  : int   = entry[2]
 
-	# Se remueve la inyección de bonus_xp a la gema. Ahora solo da su XP base.
 	_spawn_gem(pos, xp_base)
 
 	if extra_max > 0 and randf() < extra_prob:
-		var extras : int = randi_range(1, extra_max)
+		var extras   : int = randi_range(1, extra_max)
 		var small_xp : int = maxi(1, int(xp_base * 0.3))
 		for _i in range(extras):
 			_spawn_gem(pos, small_xp)
 
+## CAMBIO CLAVE: ya no instancia un PackedScene — delega directamente
+## al GemManager DOD. Sin nodos, sin overhead.
 func _spawn_gem(pos: Vector2, xp: int) -> void:
-	var gem := gem_scene.instantiate()
-	gems_container.add_child(gem)
-	gem.global_position = pos
-	if gem.has_method("setup"):
-		gem.setup(xp)
+	gem_manager.spawn_gem(pos, xp)
 
 # ════════════════════════════════════════════════════════════════
 #  PANTALLA DE MEJORA (overlay — no cambia de escena)
