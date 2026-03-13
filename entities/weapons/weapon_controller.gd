@@ -60,55 +60,77 @@ func attempt_shoot(weapon_index: int) -> bool:
 func shoot_weapon(weapon: WeaponData) -> void:
 	_apply_physics(weapon)
 	match weapon.type:
-		WeaponData.WeaponType.PROJECTILE:     _fire_projectiles(weapon)
-		WeaponData.WeaponType.HITSCAN_LASER:  _fire_laser(weapon)
+		WeaponData.WeaponType.PROJECTILE:    _fire_projectiles(weapon)
+		WeaponData.WeaponType.HITSCAN_LASER: _fire_laser(weapon)
 
+# ── SISTEMA DOD: disparo usando ProjectileManager ─────────────────────────
+## Reemplaza la instanciación de proyectile.tscn por llamadas directas al
+## ProjectileManager (buffer DOD + MultiMesh), eliminando los nodos Node2D
+## individuales y reduciendo las draw calls a 1 sin importar la cantidad.
 func _fire_projectiles(weapon: WeaponData) -> void:
-	if not weapon.projectile_scene: return
+	var pm = GameManager.projectile_manager
+	if not is_instance_valid(pm):
+		push_warning("WeaponController: ProjectileManager no disponible.")
+		return
 
-	var base_angle : float  = player.aim_angle
-	var dmg_mult   : float  = player.global_damage_mult       if "global_damage_mult"       in player else 1.0
-	var extra_pen  : int    = player.extra_penetration        if "extra_penetration"        in player else 0
-	var speed_mult : float  = player.projectile_speed_mult    if "projectile_speed_mult"    in player else 1.0
-	var size_mult  : float  = player.projectile_size_mult     if "projectile_size_mult"     in player else 1.0
-	var kb_mult    : float  = player.knockback_mult           if "knockback_mult"           in player else 1.0
+	var base_angle  : float = player.aim_angle
+	var dmg_mult    : float = player.global_damage_mult    if "global_damage_mult"    in player else 1.0
+	var extra_pen   : int   = player.extra_penetration     if "extra_penetration"     in player else 0
+	var speed_mult  : float = player.projectile_speed_mult if "projectile_speed_mult" in player else 1.0
+	var size_mult   : float = player.projectile_size_mult  if "projectile_size_mult"  in player else 1.0
+	var kb_mult     : float = player.knockback_mult        if "knockback_mult"        in player else 1.0
 
-	var final_dmg  : int = int(weapon.damage * dmg_mult)
+	var final_dmg   : int   = maxi(1, int(weapon.damage * dmg_mult))
+	var final_pen   : int   = weapon.penetration + extra_pen
+	var final_rad   : float = maxf(3.0, weapon.projectile_radius * size_mult)
 
-	var dyn_spread = current_spreads[weapon]
+	# Spread dinámico (Rifle de Asalto)
+	var dyn_spread : float = current_spreads[weapon]
 	current_spreads[weapon] = minf(current_spreads[weapon] + weapon.spread_per_shot, weapon.max_spread)
 
-	if weapon.has_muzzle_flash: muzzle_timers[weapon] = 8.0
+	if weapon.has_muzzle_flash:
+		muzzle_timers[weapon] = 8.0
+
+	var spawn_pos : Vector2 = player.global_position \
+		+ Vector2(cos(base_angle), sin(base_angle)) * 15.0
 
 	for i in range(weapon.pellets):
-		var angle: float = base_angle
+		var angle : float = base_angle
 
+		# Dispersión angular (escopeta)
 		if weapon.pellets > 1:
-			var factor: float = float(i) / float(weapon.pellets - 1)
+			var factor : float = float(i) / float(weapon.pellets - 1)
 			angle += ((factor - 0.5) * weapon.shotgun_spread) + randf_range(-0.05, 0.05)
 
+		# Spread dinámico (rifle)
 		if dyn_spread > 0.0:
 			angle += randf_range(-dyn_spread, dyn_spread)
 
-		var spawn_pos: Vector2 = player.global_position + Vector2(cos(base_angle), sin(base_angle)) * 15.0
-
-		var spd: float = weapon.projectile_speed
+		# Velocidad (puede variar entre pellets de escopeta)
+		var spd : float = weapon.projectile_speed
 		if weapon.projectile_speed_max > weapon.projectile_speed:
 			spd = randf_range(weapon.projectile_speed, weapon.projectile_speed_max)
 
-		var final_radius := maxf(3.0, weapon.projectile_radius * size_mult)
+		# Velocidad final en px/s (× 60 igual que en el proyectil original)
+		var vel : Vector2 = Vector2(cos(angle), sin(angle)) * spd * speed_mult * 60.0
 
-		var proj = weapon.projectile_scene.instantiate()
-		proj.global_position = spawn_pos
-		proj.setup(angle, spd * speed_mult, final_dmg, weapon.penetration + extra_pen, weapon, final_radius)
+		pm.spawn(
+			spawn_pos,
+			vel,
+			final_dmg,
+			final_pen,
+			weapon.max_lifetime,
+			final_rad,
+			kb_mult,
+			weapon.inner_radius_mult,
+			weapon.projectile_color,
+			weapon.use_swept_collision,
+			weapon.fade_out,
+			weapon.fade_multiplier,
+			weapon.flicker_fire_effect
+		)
 
-		# Pasar knockback_mult del jugador al proyectil
-		proj.knockback_mult = kb_mult
-
-		var pn = get_tree().get_first_node_in_group("projectiles")
-		if pn: pn.add_child(proj)
-		else: get_tree().current_scene.add_child(proj)
-
+# ── Láser hitscan (sin cambios — no genera proyectiles DOD) ──────────────
 func _fire_laser(weapon: WeaponData) -> void:
 	active_laser_weapon = weapon
 	laser_timer = 10.0

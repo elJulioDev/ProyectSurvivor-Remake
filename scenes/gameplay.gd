@@ -1,15 +1,14 @@
 extends Node2D
 
 # ── Referencias ──────────────────────────────────────────────────────
-@onready var world:                 Node2D       = $World
-@onready var projectiles_container: Node2D       = $World/Projectiles
-@onready var gems_container:        Node2D       = $World/Gems
-@onready var camera:                Camera2D     = $Camera2D
-@onready var hud:                   Control      = $HUD/HUDControl
-@onready var spawn_manager:         SpawnManager = $SpawnManager
-@onready var enemy_manager:         Node2D       = $EnemyManager
-@onready var gem_manager:           GemManager   = $GemManager
-@onready var upgrade_layer:         CanvasLayer  = $UpgradeLayer
+@onready var world:                  Node2D          = $World
+@onready var camera:                 Camera2D        = $Camera2D
+@onready var hud:                    Control         = $HUD/HUDControl
+@onready var spawn_manager:          SpawnManager    = $SpawnManager
+@onready var enemy_manager:          Node2D          = $EnemyManager
+@onready var gem_manager:            GemManager      = $GemManager
+@onready var upgrade_layer:          CanvasLayer     = $UpgradeLayer
+@onready var projectile_manager:     ProjectileManager = $ProjectileManager
 
 # ── Estado ───────────────────────────────────────────────────────────
 var score:     int   = 0
@@ -35,12 +34,12 @@ const GEM_DROP_TABLE : Dictionary = {
 # ────────────────────────────────────────────────────────────────────
 
 func _ready() -> void:
-	GameManager.enemy_manager = enemy_manager
+	# Registrar managers globales — deben estar disponibles ANTES de que
+	# cualquier arma o enemigo intente disparar/dañar.
+	GameManager.enemy_manager      = enemy_manager
+	GameManager.projectile_manager = projectile_manager
 
 	spawn_manager.setup(enemy_manager)
-	# gem_manager.setup() ya no necesita el contenedor para spawning,
-	# pero mantenemos la llamada por compatibilidad de firma.
-	gem_manager.setup(gems_container)
 
 	enemy_manager.enemy_killed.connect(_on_enemy_killed)
 
@@ -88,7 +87,6 @@ func _process(delta: float) -> void:
 #  DROPS DE GEMA
 # ════════════════════════════════════════════════════════════════
 
-## Señal recibida desde EnemyManager cuando un enemigo muere.
 func _on_enemy_killed(pos: Vector2, points: int, _type_id: int) -> void:
 	score += points * 100
 	_drop_gems(pos, points)
@@ -115,13 +113,11 @@ func _drop_gems(pos: Vector2, points: int) -> void:
 		for _i in range(extras):
 			_spawn_gem(pos, small_xp)
 
-## CAMBIO CLAVE: ya no instancia un PackedScene — delega directamente
-## al GemManager DOD. Sin nodos, sin overhead.
 func _spawn_gem(pos: Vector2, xp: int) -> void:
 	gem_manager.spawn_gem(pos, xp)
 
 # ════════════════════════════════════════════════════════════════
-#  PANTALLA DE MEJORA (overlay — no cambia de escena)
+#  PANTALLA DE MEJORA
 # ════════════════════════════════════════════════════════════════
 
 func _on_player_leveled_up() -> void:

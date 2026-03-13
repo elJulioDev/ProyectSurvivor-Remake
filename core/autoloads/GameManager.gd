@@ -21,8 +21,9 @@ const PLAYER_FRICTION = 12.0
 const ENEMY_SIZE  = 25
 const ENEMY_SPEED = 80.0
 
-# ── Referencia al EnemyManager (se asigna en gameplay.gd) ────────
-var enemy_manager : Node = null
+# ── Referencias a Managers (se asignan en gameplay.gd) ───────────────────
+var enemy_manager      : Node = null
+var projectile_manager : Node = null   # ProjectileManager DOD
 
 # Señal global para cambio de escena
 signal scene_change_requested(scene_path: String, data: Dictionary)
@@ -31,7 +32,7 @@ var current_scene_node: Node = null
 func goto_scene(path: String, data: Dictionary = {}) -> void:
 	scene_change_requested.emit(path, data)
 
-# ── Helper para que las armas obtengan enemigos cercanos ──────────
+# ── Helper para que las armas obtengan enemigos cercanos ─────────────────
 ## Devuelve proxies de enemigos dentro del radio dado.
 ## Drop-in replacement de get_tree().get_nodes_in_group("enemies")
 ## pero usando el spatial hash del EnemyManager → O(1) en lugar de O(n).

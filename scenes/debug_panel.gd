@@ -22,9 +22,11 @@ func update_debug_text() -> void:
 	if is_instance_valid(GameManager.enemy_manager):
 		enemies_count = GameManager.enemy_manager.get_active_count()
 
-	var projectiles_count: int = get_tree().get_nodes_in_group("projectiles").size()
+	# Proyectiles: ahora se leen desde el ProjectileManager DOD (no nodos de escena)
+	var projectiles_count: int = 0
+	if is_instance_valid(GameManager.projectile_manager):
+		projectiles_count = GameManager.projectile_manager.get_active_count()
 
-	# CAMBIO: las gemas ya no son nodos — preguntamos al GemManager DOD
 	var gems_count: int = 0
 	var gem_mgr = get_tree().get_first_node_in_group("gem_manager")
 	if is_instance_valid(gem_mgr):
@@ -38,7 +40,7 @@ func update_debug_text() -> void:
 	debug_text += "Objetos Render: %d\n" % objects_rendered
 	debug_text += "------------------\n"
 	debug_text += "Enemigos (MultiMesh): %d\n" % enemies_count
-	debug_text += "Proyectiles Activos: %d\n" % projectiles_count
+	debug_text += "Proyectiles (MultiMesh): %d\n" % projectiles_count
 	debug_text += "Gemas XP (MultiMesh): %d\n" % gems_count
 
 	label.text = debug_text
