@@ -62,6 +62,7 @@ const WEAPON_NAMES := {
 
 # ── Datos públicos (actualizados por gameplay.gd cada frame) ──────
 var score         : int    = 0
+var enemies_killed: int    = 0
 var enemies_alive : int    = 0
 var wave_time_str : String = "00:00"
 
@@ -309,7 +310,7 @@ func _draw_score_panel() -> void:
 
 	# Contador de enemigos
 	var en_col := C_ENEMIES if enemies_alive > 0 else C_RED
-	var en_str := "%d ENEMIGOS" % enemies_alive
+	var en_str := "%d ELIMINADOS" % enemies_killed
 	var en_w   := _str_w(en_str, FS_SMALL)
 	_text(en_str, Vector2(px + PW - en_w - 12.0, sep_y + 6.0), FS_SMALL, en_col)
 

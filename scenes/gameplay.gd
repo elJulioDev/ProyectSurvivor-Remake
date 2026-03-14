@@ -12,6 +12,7 @@ extends Node2D
 
 # ── Estado ───────────────────────────────────────────────────────────
 var score:     int   = 0
+var enemies_killed: int = 0
 var game_over: bool  = false
 var game_time: float = 0.0
 
@@ -89,6 +90,7 @@ func _process(delta: float) -> void:
 
 func _on_enemy_killed(pos: Vector2, points: int, _type_id: int) -> void:
 	score += points * 100
+	enemies_killed += 1
 	_drop_gems(pos, points)
 
 	if is_instance_valid(player_ref) and player_ref.is_alive:
@@ -181,7 +183,7 @@ func _update_hud() -> void:
 	if not is_instance_valid(hud):
 		return
 	hud.score         = score
-	hud.enemies_alive = enemy_manager.get_active_count()
+	hud.enemies_killed = enemies_killed
 	hud.wave_time_str = _format_time(game_time)
 
 func _format_time(seconds: float) -> String:
