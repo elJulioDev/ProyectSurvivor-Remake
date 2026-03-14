@@ -1,7 +1,6 @@
 [gd_resource type="Resource" script_class="WeaponData" format=3 uid="uid://mvxsytjivogs"]
 
 [ext_resource type="Script" uid="uid://bicdaci6tavf0" path="res://entities/weapons/weapon_data.gd" id="1_7w6lb"]
-[ext_resource type="PackedScene" uid="uid://lanew2n6j2j" path="res://entities/projectiles/proyectile.tscn" id="1_ptgir"]
 
 [resource]
 script = ExtResource("1_7w6lb")
@@ -14,5 +13,4 @@ shake_amount = 1.0
 projectile_radius = 60.0
 projectile_color = Color(0, 0.78039217, 1, 1)
 laser_thickness = 20.0
-projectile_scene = ExtResource("1_ptgir")
 metadata/_custom_type_script = "uid://bicdaci6tavf0"

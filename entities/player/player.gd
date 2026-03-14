@@ -109,6 +109,11 @@ func _ready() -> void:
 	add_to_group("player")
 	# Solo la pistola al inicio; las demás se desbloquean con upgrades
 	add_weapon("Pistol")
+	add_weapon("AssaultRifle")
+	add_weapon("Shotgun")
+	add_weapon("Laser")
+	add_weapon("Sniper")
+	add_weapon("Skibidi")
 
 func _physics_process(delta: float) -> void:
 	if not is_alive:
