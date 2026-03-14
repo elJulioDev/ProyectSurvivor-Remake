@@ -233,21 +233,20 @@ func _process_aura(delta: float) -> void:
 		return
 	if not is_instance_valid(GameManager.enemy_manager):
 		return
-
-	# DPS continuo
+ 
+	# DPS continuo — skip_blood=true → solo hit_flash, sin partículas de sangre
 	var enemies_in_range = GameManager.enemy_manager.get_enemies_near_proxy(
 		global_position, aura_radius)
-
+ 
 	for idx in enemies_in_range:
 		GameManager.enemy_manager.damage_enemy(
-			idx, aura_damage * delta, Vector2.ZERO, 0.0)
-
-	# Pulso de knockback periódico
+			idx, aura_damage * delta, Vector2.ZERO, 0.0, true)
+ 
+	# Pulso de knockback periódico — skip_blood=true (solo fuerza, sin sangre)
 	if aura_knockback > 0.0:
 		_aura_pulse_timer += delta
 		if _aura_pulse_timer >= aura_knockback_interval:
 			_aura_pulse_timer = 0.0
-			# Re-obtener lista por si cambió durante el frame
 			var pulse_targets = GameManager.enemy_manager.get_enemies_near_proxy(
 				global_position, aura_radius)
 			for idx in pulse_targets:
@@ -259,7 +258,7 @@ func _process_aura(delta: float) -> void:
 					dir = Vector2(randf_range(-1.0, 1.0),
 								  randf_range(-1.0, 1.0)).normalized()
 				GameManager.enemy_manager.damage_enemy(
-					idx, 0.0, dir, aura_knockback * 350.0)
+					idx, 0.0, dir, aura_knockback * 350.0, true)
 
 # ── Dash ──────────────────────────────────────────────────────────
 

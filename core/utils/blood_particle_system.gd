@@ -1,30 +1,18 @@
-## blood_particle_system.gd
-## Sistema de partículas de sangre — ProyectSurvivor (Godot 4)
+## blood_particle_system.gd — ProyectSurvivor (Godot 4)
 ##
-## ARQUITECTURA DOD (Data-Oriented Design):
-##   Todos los datos viven en PackedArrays paralelos.
-##   Sin nodos hijo, sin objetos Particle individuales.
-##   _draw() recorre los arrays UNA sola vez por frame.
+## OPTIMIZACIÓN v2 — MultiMesh rendering
+##   ANTES : 1 draw_texture_rect / draw_line por partícula → 200-500 draw calls
+##   AHORA : 1 MultiMeshInstance2D para TODAS las partículas → 1 draw call total
 ##
-## TIPOS DE PARTÍCULA (p_type[]):
-##   0 = MIST   — niebla de impacto, círculo pequeño, vida corta
-##   1 = DROP   — gota de salpicadura, se bake al suelo al detenerse
-##   2 = CHUNK  — víscera animada, cuadrado, persiste, fade-out al morir
-##   3 = DRIP   — goteo de herida, cae y se bake al suelo
-##
-## STREAK RENDERING:
-##   Si vel.length² > STREAK_THRESHOLD_SQ → draw_line(prev_pos → pos)
-##   Esto da el look de salpicadura elongada típico de shooters.
-##
-## LOD AUTOMÁTICO (auto_update_lod()):
-##   quality 2 (ALTO)   → efectos completos
-##   quality 1 (MEDIO)  → conteos reducidos a la mitad
-##   quality 0 (CRISIS) → solo mist mínimo, sin charcos en tiempo real
-##
-## BAKING AL SUELO:
-##   Las gotas (DROP, DRIP) que se detienen se envían al BloodChunkManager
-##   para pintarse como decal permanente. Se eliminan del array activo.
-##   Los CHUNK nunca se bakean, solo se desvanecen y mueren.
+## CAMBIOS CLAVE:
+##   · _draw() eliminado completamente — reemplazado por _update_multimesh()
+##   · MAX_PARTICLES reducido de 3000 → 600
+##   · Conteos de spawn reducidos ~60 %
+##   · Flushing de bakes movido FUERA del while (bug fix del original)
+##   · Referencia a chunk_manager cacheada (no más group lookup por frame)
+##   · Umbrales LOD ajustados a los nuevos límites
+##   · create_blood_splatter: throttle más estricto (MAX_BLOOD_CALLS=2)
+##   · create_viscera_explosion: conteos mínimos para evitar spikes en kills masivos
 
 extends Node2D
 class_name BloodParticleSystem
@@ -33,19 +21,25 @@ class_name BloodParticleSystem
 #  CONSTANTES
 # ════════════════════════════════════════════════════════════════════
 
-const TYPE_MIST  : int = 0
-const TYPE_DROP  : int = 1
-const TYPE_CHUNK : int = 2
-const TYPE_DRIP  : int = 3
+const TYPE_MIST  : int = 0   # nube de impacto, borde suave
+const TYPE_DROP  : int = 1   # gota principal, se bakea al detenerse
+const TYPE_CHUNK : int = 2   # víscera sólida, fade-out al morir
+const TYPE_DRIP  : int = 3   # goteo de herida, se bakea al detenerse
 
-const MAX_PARTICLES       : int   = 3000
-const STREAK_THRESHOLD_SQ : float = 5.0       # vel² > este valor → streak
-const STOP_VEL_SQ         : float = 1.5       # vel² < este → "detenida"
-const BAKE_ALPHA          : float = 0.82      # alpha con que se bake al suelo
+## Límite absoluto de partículas simultáneas (era 3000)
+const MAX_PARTICLES : int = 600
 
-# Umbrales de auto-LOD (partículas activas)
-const LOD_CRISIS_THRESHOLD : int = 1500
-const LOD_MID_THRESHOLD    : int = 800
+const STOP_VEL_SQ : float = 1.5   # vel² < esto → "detenida" → se bakea
+
+## Máximo de bakes enviados al ChunkManager por frame (lotes al suelo)
+const MAX_BAKES_PER_FRAME : int = 8
+
+## Máximo de llamadas a create_blood_splatter por frame (era 4)
+const MAX_BLOOD_CALLS_PER_FRAME : int = 2
+
+## Umbrales LOD ajustados al nuevo MAX_PARTICLES
+const LOD_CRISIS_THRESHOLD : int = 450  # quality=0 (crisis)
+const LOD_MID_THRESHOLD    : int = 250  # quality=1 (medio)
 
 # Paleta de colores
 const COL_BLOOD_RED  := Color8(160,  0,  0)
@@ -53,50 +47,86 @@ const COL_DARK_BLOOD := Color8( 80,  0,  0)
 const COL_BRIGHT_RED := Color8(220, 20, 20)
 const COL_GUTS_PINK  := Color8(180, 90,100)
 const COL_MIST_RED   := Color(0.65, 0.0, 0.0, 0.55)
-const MAX_BAKES_PER_FRAME = 15
 
 # ════════════════════════════════════════════════════════════════════
 #  EXPORTS
 # ════════════════════════════════════════════════════════════════════
 
-## Referencia al BloodChunkManager para baking de decales
-@export var chunk_manager: Node2D
-
-## Calidad inicial (el sistema ajusta automáticamente via auto_update_lod)
-@export_range(0, 2) var quality: int = 2
+@export var chunk_manager : Node2D
+@export_range(0, 2) var quality : int = 2
 
 # ════════════════════════════════════════════════════════════════════
-#  ARRAYS DOD
+#  ARRAYS DOD  (igual que antes — sin cambios de estructura)
 # ════════════════════════════════════════════════════════════════════
 
-var p_pos       := PackedVector2Array()   # posición actual (world)
-var p_prev_pos  := PackedVector2Array()   # posición frame anterior (para streaks)
-var p_vel       := PackedVector2Array()   # velocidad (world px/frame)
-var p_color     := PackedColorArray()     # color base
-var p_size      := PackedFloat32Array()   # radio o semi-lado
-var p_life      := PackedFloat32Array()   # vida restante en frames
-var p_max_life  := PackedFloat32Array()   # vida máxima
-var p_frict     := PackedFloat32Array()   # fricción por frame (0.80–0.96)
-var p_type      := PackedByteArray()      # TYPE_MIST / DROP / CHUNK / DRIP
+var p_pos      := PackedVector2Array()
+var p_prev_pos := PackedVector2Array()   # mantenemos por si se necesita en el futuro
+var p_vel      := PackedVector2Array()
+var p_color    := PackedColorArray()
+var p_size     := PackedFloat32Array()
+var p_life     := PackedFloat32Array()
+var p_max_life := PackedFloat32Array()
+var p_frict    := PackedFloat32Array()
+var p_type     := PackedByteArray()
 
-var active_count: int = 0
-
-# ════════════════════════════════════════════════════════════════════
-#  TEXTURAS DE RENDER
-# ════════════════════════════════════════════════════════════════════
-
-var _tex_circle : ImageTexture
-var _tex_square : ImageTexture
+var active_count : int = 0
 
 # ════════════════════════════════════════════════════════════════════
-#  LISTA DE BAKE PENDIENTE (acumulada durante _process, enviada al final)
+#  MULTIMESH  —  reemplaza _draw() completamente
+##
+##  INSTANCE_COLOR  (use_colors=true):
+##    r,g,b = color de la partícula   |   a = alpha ya computado
+##
+##  INSTANCE_CUSTOM (use_custom_data=true):
+##    .r = softness (1.0=niebla/drip suave, 0.0=círculo duro)
+##    otros = reservado
+##
+##  Shader: círculo con borde suave o duro según el tipo.
+##  1 draw call para TODOS los tipos de partículas.
 # ════════════════════════════════════════════════════════════════════
 
-var _bake_pos   := PackedVector2Array()
-var _bake_col   := PackedColorArray()
-var _bake_size  := PackedFloat32Array()
-var _blood_calls_this_frame: int = 0
-const MAX_BLOOD_CALLS_PER_FRAME: int = 4
+var _mm_instance : MultiMeshInstance2D
+var _mm          : MultiMesh
+
+const SHADER_CODE := """
+shader_type canvas_item;
+
+varying flat vec4  v_col;
+varying flat float v_soft;
+
+void vertex() {
+	v_col  = COLOR;
+	v_soft = INSTANCE_CUSTOM.r;
+}
+
+void fragment() {
+	vec2  uv   = UV - vec2(0.5);
+	float dist = length(uv) * 2.0;  // 0 en el centro, 1 en el borde
+
+	float edge;
+	if (v_soft > 0.5) {
+		// Borde gaussiano suave para TYPE_MIST y TYPE_DRIP
+		float t = max(0.0, 1.0 - dist);
+		edge = t * t * 0.90;
+	} else {
+		// Borde nítido con antialiasing de 1px para TYPE_DROP y TYPE_CHUNK
+		edge = smoothstep(1.06, 0.80, dist);
+	}
+
+	if (edge < 0.008) discard;
+	COLOR = vec4(v_col.rgb, v_col.a * edge);
+}
+"""
+
+# ════════════════════════════════════════════════════════════════════
+#  ACUMULADORES DE BAKE  (se flushean UNA VEZ al final del frame)
+# ════════════════════════════════════════════════════════════════════
+
+var _bake_pos  := PackedVector2Array()
+var _bake_col  := PackedColorArray()
+var _bake_size := PackedFloat32Array()
+
+var _blood_calls_this_frame : int = 0
 
 # ════════════════════════════════════════════════════════════════════
 #  INIT
@@ -105,8 +135,7 @@ const MAX_BLOOD_CALLS_PER_FRAME: int = 4
 func _ready() -> void:
 	add_to_group("blood_particles")
 	_resize_arrays(MAX_PARTICLES)
-	_tex_circle = _make_circle_tex(32)
-	_tex_square = _make_square_tex(16)
+	_init_multimesh()
 
 func _resize_arrays(n: int) -> void:
 	p_pos.resize(n);      p_prev_pos.resize(n)
@@ -115,26 +144,30 @@ func _resize_arrays(n: int) -> void:
 	p_max_life.resize(n); p_frict.resize(n)
 	p_type.resize(n)
 
-func _make_circle_tex(d: int) -> ImageTexture:
-	var img    := Image.create(d, d, false, Image.FORMAT_RGBA8)
-	var center := Vector2(d * 0.5, d * 0.5)
-	var r      := d * 0.5 - 0.5
-	for y in range(d):
-		for x in range(d):
-			var dist := Vector2(x + 0.5, y + 0.5).distance_to(center)
-			if dist <= r:
-				# Borde suave (antialiasing manual)
-				var edge := clampf(r - dist, 0.0, 1.0)
-				img.set_pixel(x, y, Color(1, 1, 1, edge))
-	return ImageTexture.create_from_image(img)
+func _init_multimesh() -> void:
+	_mm              = MultiMesh.new()
+	_mm.mesh         = QuadMesh.new()
+	_mm.mesh.size    = Vector2(1.0, 1.0)
+	_mm.use_colors        = true
+	_mm.use_custom_data   = true
+	_mm.instance_count    = MAX_PARTICLES
+	_mm.visible_instance_count = 0
+	# AABB enorme: desactivamos el frustum culling de Godot (lo hacemos manual)
+	_mm.custom_aabb = AABB(Vector3(-100000, -100000, -1),
+	                       Vector3( 200000,  200000,  2))
 
-func _make_square_tex(s: int) -> ImageTexture:
-	var img := Image.create(s, s, false, Image.FORMAT_RGBA8)
-	img.fill(Color.WHITE)
-	return ImageTexture.create_from_image(img)
+	var mat    := ShaderMaterial.new()
+	var shader := Shader.new()
+	shader.code  = SHADER_CODE
+	mat.shader   = shader
+
+	_mm_instance           = MultiMeshInstance2D.new()
+	_mm_instance.multimesh = _mm
+	_mm_instance.material  = mat
+	add_child(_mm_instance)
 
 # ════════════════════════════════════════════════════════════════════
-#  LOD
+#  LOD AUTOMÁTICO
 # ════════════════════════════════════════════════════════════════════
 
 func set_quality(level: int) -> void:
@@ -146,53 +179,49 @@ func auto_update_lod() -> void:
 	else:                                      quality = 2
 
 # ════════════════════════════════════════════════════════════════════
-#  PROCESO PRINCIPAL
+#  PROCESO PRINCIPAL  (_draw() eliminado — usamos MultiMesh)
 # ════════════════════════════════════════════════════════════════════
 
 func _process(delta: float) -> void:
 	_blood_calls_this_frame = 0
 	auto_update_lod()
+
 	if active_count == 0:
+		_mm.visible_instance_count = 0
 		return
 
+	# Limpiar acumuladores de bake del frame anterior
 	_bake_pos.clear()
 	_bake_col.clear()
 	_bake_size.clear()
 
-	var dt := delta * 60.0   # normalizado a 60fps como en el original Pygame
+	var dt := delta * 60.0   # normalizado a 60fps
 
+	# ── Actualizar física de todas las partículas ──────────────────
+	# Iteramos HACIA ATRÁS para que swap-back sea correcto al eliminar
 	var i := active_count - 1
 	while i >= 0:
-		var vel  := p_vel[i]
-		var ptype := int(p_type[i])
-
-		# Guardar posición previa para streaks
 		p_prev_pos[i] = p_pos[i]
 
-		# Integración de movimiento
-		vel           *= pow(p_frict[i], dt)
-		p_vel[i]       = vel
-		p_pos[i]      += vel * dt
-
-		# Decremento de vida
+		var vel := p_vel[i]
+		vel      *= pow(p_frict[i], dt)
+		p_vel[i]  = vel
+		p_pos[i] += vel * dt
 		p_life[i] -= dt
 
+		var ptype  := int(p_type[i])
 		var vel_sq := vel.length_squared()
-		var stopped := vel_sq < STOP_VEL_SQ
 
-		# ── Baking al suelo (DROP y DRIP detenidas) ──────────────
-		if (ptype == TYPE_DROP or ptype == TYPE_DRIP) and stopped:
-			if chunk_manager:
-				_bake_pos.append(p_pos[i])
-				_bake_col.append(p_color[i])
-				# MULTIPLICADOR CLAVE: Convertimos el radio en diámetro y lo exageramos
-				# para que la mancha aplastada sea mucho mayor que la gota en el aire
-				_bake_size.append(p_size[i] * 3.5) 
+		# Bakear al suelo si la gota/goteo se detuvo
+		if (ptype == TYPE_DROP or ptype == TYPE_DRIP) and vel_sq < STOP_VEL_SQ:
+			_bake_pos.append(p_pos[i])
+			_bake_col.append(p_color[i])
+			_bake_size.append(p_size[i] * 3.5)
 			_remove(i)
 			i -= 1
 			continue
 
-		# ── Muerte por agotamiento ────────────────────────────────
+		# Eliminar por tiempo de vida agotado
 		if p_life[i] <= 0.0:
 			_remove(i)
 			i -= 1
@@ -200,157 +229,99 @@ func _process(delta: float) -> void:
 
 		i -= 1
 
-		# Limitar la cantidad de bakes que enviamos este frame
-		var bakes_to_send_pos = PackedVector2Array()
-		var bakes_to_send_col = PackedColorArray()
-		var bakes_to_send_size = PackedFloat32Array()
+	# ── Flush de bakes UNA SOLA VEZ por frame (fuera del while) ───
+	# BUG FIX del original: el flush estaba DENTRO del while, una vez por iteración
+	if chunk_manager and _bake_pos.size() > 0:
+		var n := mini(_bake_pos.size(), MAX_BAKES_PER_FRAME)
+		chunk_manager.bake_particles_batch(
+			_bake_pos.slice(0, n),
+			_bake_col.slice(0, n),
+			_bake_size.slice(0, n)
+		)
 
-		var count_to_bake = min(_bake_pos.size(), MAX_BAKES_PER_FRAME)
-		
-		for j in range(count_to_bake):
-			bakes_to_send_pos.append(_bake_pos[j])
-			bakes_to_send_col.append(_bake_col[j])
-			bakes_to_send_size.append(_bake_size[j])
-
-		if chunk_manager and bakes_to_send_pos.size() > 0:
-			chunk_manager.bake_particles_batch(bakes_to_send_pos, bakes_to_send_col, bakes_to_send_size)
-
-		# Eliminar los que ya se enviaron, dejando el resto para el siguiente frame
-		var remaining = _bake_pos.size() - count_to_bake
-		_bake_pos = _bake_pos.slice(count_to_bake, count_to_bake + remaining)
-		_bake_col = _bake_col.slice(count_to_bake, count_to_bake + remaining)
-		_bake_size = _bake_size.slice(count_to_bake, count_to_bake + remaining)
-
-	queue_redraw()
+	# ── Actualizar MultiMesh (1 draw call en GPU) ──────────────────
+	_update_multimesh()
 
 # ════════════════════════════════════════════════════════════════════
-#  RENDER
+#  RENDER — actualiza el MultiMesh con frustum culling manual
 # ════════════════════════════════════════════════════════════════════
 
-func _draw() -> void:
-	if active_count == 0:
-		return
+func _update_multimesh() -> void:
+	var player   := get_tree().get_first_node_in_group("player")
+	var cam_pos  = player.global_position if is_instance_valid(player) else Vector2.ZERO
 
-	# Calcular el rectángulo visible de la cámara con un margen
-	var cam := get_viewport().get_camera_2d()
-	var cull_rect := Rect2()
-	if cam:
-		var zoom_factor := cam.zoom
-		var vp_size := get_viewport_rect().size / zoom_factor
-		var cam_pos := cam.get_screen_center_position()
-		# Expandimos el rect un poco para que no desaparezcan partículas en los bordes
-		cull_rect = Rect2(cam_pos - vp_size * 0.5, vp_size).grow(100.0)
+	var viewport  := get_viewport()
+	var cam       := viewport.get_camera_2d()
+	var cam_zoom  := cam.zoom if cam else Vector2.ONE
+	var view_size := viewport.get_visible_rect().size / cam_zoom
+	var half_x    := view_size.x * 0.5 + 120.0
+	var half_y    := view_size.y * 0.5 + 120.0
 
-	for i in range(active_count):
-		var pos   := p_pos[i]
-		
-		# CULLING: Si la partícula no está en pantalla, saltamos el render
-		if cam and not cull_rect.has_point(pos):
+	var vis := 0
+
+	for idx in range(active_count):
+		var pos := p_pos[idx]
+
+		# Frustum culling manual — saltar partículas fuera de pantalla
+		if absf(pos.x - cam_pos.x) > half_x or absf(pos.y - cam_pos.y) > half_y:
 			continue
 
-		var life_ratio := p_life[i] / maxf(1.0, p_max_life[i])
+		var life_ratio := p_life[idx] / maxf(1.0, p_max_life[idx])
 		if life_ratio <= 0.0:
 			continue
 
-		var ptype := int(p_type[i])
-		var vel   := p_vel[i]
-		var sz    := p_size[i]
-		var col   := p_color[i]
-		var vel_sq := vel.length_squared()
+		var ptype := int(p_type[idx])
+		var col   := p_color[idx]
 
+		# Calcular alpha final según el tipo de partícula
+		var alpha := col.a
 		match ptype:
 			TYPE_MIST:
-				# Círculo pequeño que se desvanece rápido
-				var a := life_ratio * col.a
-				draw_texture_rect(
-					_tex_circle,
-					Rect2(pos.x - sz, pos.y - sz, sz * 2.0, sz * 2.0),
-					false,
-					Color(col.r, col.g, col.b, a)
-				)
-
+				alpha *= life_ratio
 			TYPE_DROP:
-				# Streak si se mueve rápido, círculo si va lento
-				var a := minf(1.0, life_ratio * 1.3) * col.a
-				if vel_sq > STREAK_THRESHOLD_SQ:
-					# Línea desde posición anterior → actual
-					var prev := p_prev_pos[i]
-					var streak_width := maxf(1.0, sz * 0.55)
-					# Cuerpo del streak
-					draw_line(prev, pos, Color(col.r, col.g, col.b, a * 0.9), streak_width)
-					# Cabeza brillante
-					draw_texture_rect(
-						_tex_circle,
-						Rect2(pos.x - sz * 0.5, pos.y - sz * 0.5, sz, sz),
-						false,
-						Color(col.r * 1.1, col.g, col.b, a)
-					)
-				else:
-					draw_texture_rect(
-						_tex_circle,
-						Rect2(pos.x - sz, pos.y - sz, sz * 2.0, sz * 2.0),
-						false,
-						Color(col.r, col.g, col.b, a)
-					)
-
+				alpha *= minf(1.0, life_ratio * 1.3)
 			TYPE_CHUNK:
-				# Cuadrado con fade-out al final de vida
-				var a := col.a
 				if life_ratio < 0.35:
-					a *= life_ratio / 0.35
-				# Streak de chunk si se mueve rápido
-				if vel_sq > STREAK_THRESHOLD_SQ:
-					var prev := p_prev_pos[i]
-					draw_line(prev, pos, Color(col.r, col.g, col.b, a * 0.7), sz * 0.8)
-				draw_texture_rect(
-					_tex_square,
-					Rect2(pos.x - sz * 0.5, pos.y - sz * 0.5, sz, sz),
-					false,
-					Color(col.r, col.g, col.b, a)
-				)
-
+					alpha *= (life_ratio / 0.35)
 			TYPE_DRIP:
-				# Gota que cae lentamente — círculo alargado
-				var a := minf(1.0, life_ratio * 2.0) * col.a
-				if vel_sq > 0.1:
-					draw_line(
-						p_prev_pos[i], pos,
-						Color(col.r, col.g, col.b, a),
-						maxf(1.5, sz * 0.7)
-					)
-				draw_texture_rect(
-					_tex_circle,
-					Rect2(pos.x - sz * 0.6, pos.y - sz * 0.6, sz * 1.2, sz * 1.2),
-					false,
-					Color(col.r, col.g, col.b, a)
-				)
+				alpha *= minf(1.0, life_ratio * 2.0)
+
+		if alpha < 0.02:
+			continue
+
+		# Tamaño del quad: 2.4× el radio de la partícula
+		var quad_size := p_size[idx] * 2.4
+		_mm.set_instance_transform_2d(vis,
+			Transform2D(0.0, Vector2(quad_size, quad_size), 0.0, pos))
+		_mm.set_instance_color(vis, Color(col.r, col.g, col.b, alpha))
+
+		# Softness flag: TYPE_MIST y TYPE_DRIP usan borde gaussiano
+		var is_soft := 1.0 if (ptype == TYPE_MIST or ptype == TYPE_DRIP) else 0.0
+		_mm.set_instance_custom_data(vis, Color(is_soft, 0.0, 0.0, 0.0))
+
+		vis += 1
+
+	_mm.visible_instance_count = vis
 
 # ════════════════════════════════════════════════════════════════════
-#  SPAWN INTERNO
+#  SPAWN / REMOVE INTERNO
 # ════════════════════════════════════════════════════════════════════
 
-func _spawn(
-	pos:      Vector2,
-	vel:      Vector2,
-	color:    Color,
-	size:     float,
-	life:     float,
-	frict:    float,
-	ptype:    int
-) -> void:
+func _spawn(pos: Vector2, vel: Vector2, color: Color,
+            size: float, life: float, frict: float, ptype: int) -> void:
 	if active_count >= MAX_PARTICLES:
 		return
-	var i           := active_count
-	p_pos[i]         = pos
-	p_prev_pos[i]    = pos
-	p_vel[i]         = vel
-	p_color[i]       = color
-	p_size[i]        = size
-	p_life[i]        = life
-	p_max_life[i]    = life
-	p_frict[i]       = frict
-	p_type[i]        = ptype
-	active_count    += 1
+	var i        := active_count
+	p_pos[i]      = pos
+	p_prev_pos[i] = pos
+	p_vel[i]      = vel
+	p_color[i]    = color
+	p_size[i]     = size
+	p_life[i]     = life
+	p_max_life[i] = life
+	p_frict[i]    = frict
+	p_type[i]     = ptype
+	active_count += 1
 
 func _remove(i: int) -> void:
 	active_count -= 1
@@ -371,9 +342,8 @@ func _remove(i: int) -> void:
 # ════════════════════════════════════════════════════════════════════
 
 ## ── 1. SALPICADURA DE IMPACTO ────────────────────────────────────
-## Llamar al impactar un proyectil. `direction_vector` = dirección de
-## vuelo del proyectil (normalizada). `damage_ratio` 0-1 escala la
-## cantidad e intensidad según el daño relativo al max_health.
+## Llamado al impactar proyectiles. Solo se usa si skip_blood=false
+## en damage_enemy(). El aura NO llama esto nunca.
 func create_blood_splatter(
 	pos:              Vector2,
 	direction_vector: Vector2 = Vector2.ZERO,
@@ -387,202 +357,147 @@ func create_blood_splatter(
 	if quality == 0 or active_count >= MAX_PARTICLES:
 		return
 
-	# LIMITADOR DINÁMICO: Mientras más partículas hay, menos nacen
-	var load_factor := float(active_count) / float(MAX_PARTICLES)
-	var spawn_multiplier := clampf(1.0 - load_factor, 0.1, 1.0) # Reduce hasta el 10%
-	
-	count = int(count * spawn_multiplier)
-	if count <= 0: return # Saltamos si estamos muy saturados
+	# Reducir spawn proporcionalmente a la carga actual
+	var load_factor  := float(active_count) / float(MAX_PARTICLES)
+	var spawn_mult   := clampf(1.0 - load_factor, 0.1, 1.0)
+	var intensity    := clampf(damage_ratio, 0.2, 1.0)
 
-	var intensity := clampf(damage_ratio, 0.2, 1.0)
-	var mist_count : int
+	# Conteos reducidos ~60% respecto al original
 	var drop_count : int
-	
+	var mist_count : int
 	match quality:
 		2:
-			mist_count = int(count * 0.8 * intensity) + 4
-			drop_count = int(count * 1.5 * intensity) + 4
+			drop_count = int(count * 0.55 * intensity * spawn_mult) + 2
+			mist_count = int(count * 0.28 * intensity * spawn_mult) + 1
 		1:
-			mist_count = int(count * 0.4 * intensity) + 2
-			drop_count = int(count * 0.8 * intensity) + 2
+			drop_count = int(count * 0.28 * intensity * spawn_mult) + 1
+			mist_count = 0
 		_:
 			return
 
-	var base_angle: float = direction_vector.angle() if direction_vector != Vector2.ZERO else 0.0
+	var base_angle := direction_vector.angle() if direction_vector != Vector2.ZERO else 0.0
 	var has_dir    := direction_vector != Vector2.ZERO
 
-	# ── DROPS: Manchas principales ──────────
 	for _i in range(drop_count):
-		var angle: float = base_angle + randf_range(-0.55, 0.55) if has_dir else randf_range(0.0, TAU)
-		var speed := randf_range(4.0, 13.0) * force
-		
-		# Tamaños pequeños en el aire (radio 2 a 5), idéntico a Pygame
-		var sz    := randf_range(2.0, 5.0) 
-		var life  := randf_range(40.0, 80.0)
+		var angle := base_angle + randf_range(-0.55, 0.55) if has_dir else randf_range(0.0, TAU)
+		var speed := randf_range(3.0, 10.0) * force
+		var sz    := randf_range(2.0, 4.5)
+		var col   : Color = [COL_BLOOD_RED, COL_BRIGHT_RED, COL_DARK_BLOOD].pick_random()
+		col.a = 0.92
+		_spawn(pos, Vector2(cos(angle), sin(angle)) * speed, col,
+		       sz, randf_range(30.0, 65.0), 0.84, TYPE_DROP)
 
-		var col: Color = [COL_BLOOD_RED, COL_BRIGHT_RED, COL_DARK_BLOOD].pick_random()
-		col.a = 0.95
-
-		_spawn(pos, Vector2(cos(angle), sin(angle)) * speed,
-			   col, sz, life, 0.84, TYPE_DROP)
-
-	# ── MIST: Niebla acompañante ──────────────────────────
 	for _i in range(mist_count):
-		var angle: float = base_angle + randf_range(-1.4, 1.4) if has_dir else randf_range(0.0, TAU)
-		var speed := randf_range(6.0, 18.0 * intensity) * force
-		var sz    := randf_range(2.5, 5.0 + intensity * 2.0)
+		var angle := base_angle + randf_range(-1.2, 1.2) if has_dir else randf_range(0.0, TAU)
+		var speed := randf_range(4.0, 14.0 * intensity) * force
 		var col   := COL_MIST_RED
-		col.a     = randf_range(0.4, 0.7)
+		col.a     = randf_range(0.32, 0.62)
+		_spawn(pos, Vector2(cos(angle), sin(angle)) * speed, col,
+		       randf_range(2.0, 4.0), randf_range(6.0, 13.0), 0.75, TYPE_MIST)
 
-		_spawn(pos, Vector2(cos(angle), sin(angle)) * speed,
-			   col, sz, randf_range(8.0, 18.0), 0.75, TYPE_MIST)
-
+## ── 2. GOTEO DE HERIDA ────────────────────────────────────────────
+## Solo se llama desde EnemyManager._physics_process con throttle=3/frame.
+## El aura NO llama esto (bleed_intensities no se acumula con skip_blood).
 func create_blood_drip(pos: Vector2, intensity: float = 1.0) -> void:
 	if quality == 0:
 		return
+	var sz  := clampf(3.0 + intensity * 0.25, 2.5, 9.0)
+	var col := COL_DARK_BLOOD if intensity > 10.0 else COL_BLOOD_RED
+	col.a   = 0.88
+	var angle := randf_range(0.0, TAU)
+	_spawn(
+		pos + Vector2(randf_range(-4.0, 4.0), randf_range(-4.0, 4.0)),
+		Vector2(cos(angle), sin(angle)) * randf_range(0.0, 0.5),
+		col, sz, randf_range(25.0, 50.0), 0.85, TYPE_DRIP
+	)
 
-	var drops := 1
-	if intensity > 12.0 and quality == 2:
-		drops = randi_range(1, 3)
-
-	for _i in range(drops):
-		var offset := Vector2(randf_range(-5.0, 5.0), randf_range(-5.0, 5.0))
-		var sz     := clampf(4.0 + intensity * 0.3, 3.0, 11.0) # Gotas más grandes
-		var col: Color = COL_DARK_BLOOD if intensity > 10.0 else COL_BLOOD_RED
-		col.a = 0.90
-
-		# Movimiento radial suave sin inercias gravitacionales en Y
-		var angle = randf_range(0.0, TAU)
-		var speed = randf_range(0.0, 0.6)
-		var vel = Vector2(cos(angle), sin(angle)) * speed
-
-		_spawn(pos + offset, vel, col, sz,
-			   randf_range(30.0, 60.0), 0.85, TYPE_DRIP)
-
-
-## ── 3. CHARCO INMEDIATO (bake directo) ───────────────────────────
-## Para muerte de enemigo: crea un charco grande bakeado al instante.
-## NO genera partículas en vuelo — va directo al ChunkManager.
+## ── 3. CHARCO DE SANGRE (bake directo al suelo) ───────────────────
 func create_blood_pool(pos: Vector2, radius_mult: float = 1.0) -> void:
 	if not chunk_manager:
-		_create_pool_particles(pos, radius_mult)
 		return
-
-	var blobs: int
-	match quality:
-		2: blobs = randi_range(6, 10)
-		1: blobs = randi_range(3, 5)
-		_: blobs = randi_range(1, 2)
-
+	var blobs := randi_range(3, 6) if quality == 2 else randi_range(1, 2)
 	for _i in range(blobs):
-		var offset_dist: float = randf_range(0.0, 18.0 * radius_mult) if blobs > 1 else 0.0
-		var offset_angle := randf_range(0.0, TAU)
-		var blob_pos     := pos + Vector2(cos(offset_angle), sin(offset_angle)) * offset_dist
-
-		var sz: float
-		match quality:
-			2: sz = randf_range(40.0, 96.0 * radius_mult)
-			1: sz = randf_range(24.0, 48.0 * radius_mult)
-			_: sz = randf_range(20.0, 32.0)
-
-        # En lugar de mandarlo al chunk_manager directo, lo encolamos:
+		var angle    := randf_range(0.0, TAU)
+		var dist     := randf_range(0.0, 15.0 * radius_mult)
+		var blob_pos := pos + Vector2(cos(angle), sin(angle)) * dist
+		var sz       := randf_range(30.0, 80.0 * radius_mult) if quality == 2 \
+		                else randf_range(18.0, 40.0)
 		_bake_pos.append(blob_pos)
 		_bake_col.append(COL_DARK_BLOOD)
 		_bake_size.append(sz)
 
-func _create_pool_particles(pos: Vector2, radius_mult: float) -> void:
-	var blobs: int = randi_range(3, 6) if quality == 2 else 2
-	for _i in range(blobs):
-		var angle  := randf_range(0.0, TAU)
-		var dist   := randf_range(0.0, 20.0 * radius_mult)
-		var bpos   := pos + Vector2(cos(angle), sin(angle)) * dist
-		var sz     := randf_range(10.0, 24.0 * radius_mult)
-		_spawn(bpos, Vector2.ZERO, COL_DARK_BLOOD, sz,
-			   80.0, 0.0, TYPE_DROP)
-
-
 ## ── 4. EXPLOSIÓN DE VÍSCERAS (muerte de enemigo) ─────────────────
-## `size_mult` escala todo con el tipo de enemigo (0.7–2.2).
+## Conteos reducidos agresivamente para evitar spikes de FPS en kills masivos.
+## El original generaba 22 mist + 9 chunks + 16 drops = 47 partículas/muerte.
+## Ahora: 6 mist + 2 chunks + 4 drops = 12 partículas/muerte (quality=2).
 func create_viscera_explosion(pos: Vector2, size_mult: float = 1.0) -> void:
-	var mist_count : int
-	var chunk_count: int
-	
+	# Verificar headroom antes de spawnar nada
+	if active_count > MAX_PARTICLES - 15:
+		if quality > 0:
+			create_blood_pool(pos, size_mult)
+		return
+
+	var mist_count  : int
+	var chunk_count : int
+	var drop_count  : int
+
 	match quality:
 		2:
-			mist_count  = 22
-			chunk_count = 9
-		1:
 			mist_count  = 6
 			chunk_count = 2
-		_:
+			drop_count  = 4
+		1:
 			mist_count  = 2
+			chunk_count = 1
+			drop_count  = 1
+		_:
+			mist_count  = 1
 			chunk_count = 0
+			drop_count  = 0
 
 	if quality > 0:
 		create_blood_pool(pos, size_mult)
 
-	# ── MIST: nube de sangre ───────────────────────
+	# Niebla de sangre
 	for _i in range(mist_count):
 		var angle := randf_range(0.0, TAU)
-		var speed := randf_range(3.0, 10.0 * size_mult)
-		var sz    := randf_range(3.0, 6.0 * size_mult)
-		var life  := randf_range(20.0, 45.0)
-		var col   : Color = COL_BLOOD_RED if randf() < 0.5 else COL_BRIGHT_RED
-		col.a      = randf_range(0.6, 0.85)
-		
-		_spawn(pos, Vector2(cos(angle), sin(angle)) * speed,
-			   col, sz, life, 0.89, TYPE_MIST)
+		var speed := randf_range(2.0, 7.0 * size_mult)
+		var sz    := randf_range(2.5, 5.0 * size_mult)
+		var col   := COL_BLOOD_RED if randf() < 0.5 else COL_BRIGHT_RED
+		col.a      = randf_range(0.55, 0.82)
+		_spawn(pos, Vector2(cos(angle), sin(angle)) * speed, col,
+		       sz, randf_range(14.0, 32.0), 0.89, TYPE_MIST)
 
-	# ── CHUNKS: trozos de carne (No se hornean, persisten) ───────────────────
+	# Trozos de víscera (persisten más tiempo)
 	for _i in range(chunk_count):
 		var angle := randf_range(0.0, TAU)
-		var speed := randf_range(5.0, 12.0 * size_mult)
-		var sz    := randf_range(4.0, 9.0 * size_mult)
-		var life  := randf_range(100.0, 300.0)
-		var col   : Color = COL_DARK_BLOOD if randf() < 0.5 else COL_GUTS_PINK
+		var speed := randf_range(4.0, 10.0 * size_mult)
+		var sz    := randf_range(3.0, 7.0 * size_mult)
+		var col   := COL_DARK_BLOOD if randf() < 0.5 else COL_GUTS_PINK
 		col.a      = 0.95
-		
-		_spawn(pos, Vector2(cos(angle), sin(angle)) * speed,
-			   col, sz, life, 0.91, TYPE_CHUNK)
+		_spawn(pos, Vector2(cos(angle), sin(angle)) * speed, col,
+		       sz, randf_range(80.0, 200.0), 0.91, TYPE_CHUNK)
 
-	# ── DROPS largos: Salpicaduras masivas radiales
-	if quality >= 1:
-		var long_drops := int(clampf(8.0 * size_mult, 4.0, 16.0))
-		for _i in range(long_drops):
-			var angle := randf_range(0.0, TAU)
-			var speed := randf_range(8.0, 22.0 * size_mult) # Mayor velocidad inicial
-			var col   := COL_BLOOD_RED if randf() < 0.7 else COL_DARK_BLOOD
-			col.a      = 0.95
-			_spawn(pos, Vector2(cos(angle), sin(angle)) * speed,
-				   col, randf_range(4.0, 8.0 * size_mult), # Tamaño incrementado masivamente
-				   randf_range(20.0, 45.0), 0.78, TYPE_DROP) # Fricción fuerte para que la sangre reviente y se asiente rápido
+	# Gotas de salpicadura masiva
+	for _i in range(drop_count):
+		var angle := randf_range(0.0, TAU)
+		var speed := randf_range(6.0, 18.0 * size_mult)
+		var col   := COL_BLOOD_RED if randf() < 0.7 else COL_DARK_BLOOD
+		col.a      = 0.92
+		_spawn(pos, Vector2(cos(angle), sin(angle)) * speed, col,
+		       randf_range(3.0, 7.0 * size_mult),
+		       randf_range(14.0, 32.0), 0.78, TYPE_DROP)
 
-
-## ── 5. MANCHA DE HERIDA EN EL CUERPO DEL ENEMIGO ────────────────
-## Bake directo al suelo bajo la posición del enemigo.
-## Llamar desde enemy.gd cuando recibe daño acumulado suficiente.
+## ── 5. MANCHA DE HERIDA (bake directo al suelo) ───────────────────
+## Solo se llama para golpes significativos (amount > 10 o dmg_ratio > 0.3).
+## El aura NUNCA llama esto (skip_blood=true en damage_enemy).
 func create_wound_stain(pos: Vector2, dmg_ratio: float) -> void:
-	if not chunk_manager or dmg_ratio < 0.05:
+	if not chunk_manager or dmg_ratio < 0.1:
 		return
-
-	var pos_arr  := PackedVector2Array()
-	var col_arr  := PackedColorArray()
-	var size_arr := PackedFloat32Array()
-
-	# Una mancha principal + gotas satélite
-	pos_arr.append(pos)
-	col_arr.append(COL_DARK_BLOOD)
-	size_arr.append(randf_range(8.0, 18.0) * (0.5 + dmg_ratio))
-
-	if quality >= 1 and dmg_ratio > 0.2:
-		for _i in range(randi_range(1, 3)):
-			var offset := Vector2(randf_range(-12.0, 12.0), randf_range(-12.0, 12.0))
-			pos_arr.append(pos + offset)
-			col_arr.append(COL_BLOOD_RED)
-			size_arr.append(randf_range(3.0, 8.0) * dmg_ratio)
-
-	chunk_manager.bake_particles_batch(pos_arr, col_arr, size_arr)
-
+	var pa := PackedVector2Array([pos])
+	var ca := PackedColorArray([COL_DARK_BLOOD])
+	var sa := PackedFloat32Array([randf_range(6.0, 14.0) * (0.5 + dmg_ratio)])
+	chunk_manager.bake_particles_batch(pa, ca, sa)
 
 # ════════════════════════════════════════════════════════════════════
 #  UTILIDADES
@@ -596,3 +511,4 @@ func clear() -> void:
 	_bake_pos.clear()
 	_bake_col.clear()
 	_bake_size.clear()
+	_mm.visible_instance_count = 0
