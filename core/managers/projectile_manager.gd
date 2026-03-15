@@ -2,82 +2,114 @@ extends Node2D
 class_name ProjectileManager
 
 ## ════════════════════════════════════════════════════════════════════════════
-##  ProjectileManager — DOD + MultiMesh  (ProyectSurvivor)
+##  ProjectileManager v2 — DOD + MultiMesh + Comportamientos Avanzados
 ##
-##  Reemplaza los nodos Node2D individuales (proyectile.tscn) por arrays
-##  paralelos renderizados en un único MultiMeshInstance2D → 1 draw call
-##  independientemente de la cantidad de proyectiles en pantalla.
+##  NUEVOS SISTEMAS:
+##    · Homing       — giro suave hacia el enemigo más cercano (turn rate en rad/s)
+##    · Rebote       — refleja velocidad en los límites del mundo
+##    · Sine motion  — oscilación perpendicular a la trayectoria
+##    · Aceleración  — cambio de velocidad con cap opcional
+##    · Size growth  — radio de colisión crece con el tiempo
+##    · Cadena       — al morir por impacto, salta al siguiente enemigo
+##    · Explosión    — daño en área al morir (hit o expirar)
+##    · Split        — genera N proyectiles secundarios al morir
 ##
-##  ARQUITECTURA:
-##    · Todos los datos viven en PackedArrays paralelos (cero nodos hijos).
-##    · Un único MultiMeshInstance2D con shader personalizado renderiza TODO.
-##    · La física (movimiento, colisión, swept) corre en _physics_process.
-##    · Frustum culling manual: solo se envían a GPU los proyectiles visibles.
-##    · Swap-back O(1) para eliminar proyectiles sin desplazar el array.
-##
-##  INTEGRACIÓN:
-##    · gameplay.gd  → GameManager.projectile_manager = $ProjectileManager
-##    · weapon_controller.gd → GameManager.projectile_manager.spawn(...)
-##
-##  INSTANCE_COLOR (use_colors=true):
-##    r,g,b = color principal del proyectil | a = alpha (fade-out)
-##
-##  INSTANCE_CUSTOM (use_custom_data=true):
-##    .r = inner_mult   (0.0 = sin círculo interior, >0 = radio del núcleo)
-##    .g = flicker_rand (valor aleatorio 0-1, actualizado cada frame)
-##    .b = is_flicker   (1.0 si el arma tiene efecto de llama/chispa)
-##    .a = reservado
+##  Todos los nuevos datos viven en PackedArrays (DOD).
+##  Los spawns de cadena/split se acumulan en _pending_spawns y se
+##  instancian AL FINAL del frame para no invalidar los índices del loop.
 ## ════════════════════════════════════════════════════════════════════════════
 
 const MAX_PROJECTILES := 1500
 
-## quad_side = radius * QUAD_MULT.
-## Con QUAD_MULT=2.5 → outer_r en UV = 1/(2.5*0.5) = 0.40 (ver shader).
+## quad_side = radius * QUAD_MULT para el shader circular.
 const QUAD_MULT := 2.5
 
 # ════════════════════════════════════════════════════════════════════════════
-#  1. ARRAYS DOD
+#  1. ARRAYS DOD — BASE (sin cambios respecto a v1)
 # ════════════════════════════════════════════════════════════════════════════
 
 var active_count := 0
 
 var positions      := PackedVector2Array()
-var prev_positions := PackedVector2Array()   # para swept collision (francotirador)
+var prev_positions := PackedVector2Array()
 var velocities     := PackedVector2Array()
 var damages        := PackedInt32Array()
-var penetrations   := PackedInt32Array()     # penetraciones restantes
-var lifetimes      := PackedFloat32Array()   # en frames (@ 60 fps)
-var max_lifetimes  := PackedFloat32Array()   # en frames
-var radii          := PackedFloat32Array()   # radio de colisión / render
-var kb_mults       := PackedFloat32Array()   # multiplicador de knockback
-var inner_mults    := PackedFloat32Array()   # radio del núcleo interior (0 = ninguno)
+var penetrations   := PackedInt32Array()
+var lifetimes      := PackedFloat32Array()
+var max_lifetimes  := PackedFloat32Array()
+var radii          := PackedFloat32Array()
+var kb_mults       := PackedFloat32Array()
+var inner_mults    := PackedFloat32Array()
 var col_r          := PackedFloat32Array()
 var col_g          := PackedFloat32Array()
 var col_b          := PackedFloat32Array()
-var use_swept      := PackedByteArray()      # 1 = swept collision (sniper)
-var fade_out       := PackedByteArray()      # 1 = fade progresivo
-var fade_mults     := PackedFloat32Array()   # multiplicador del fade
-var flicker_flags  := PackedByteArray()      # 1 = efecto llama (escopeta)
+var use_swept      := PackedByteArray()
+var fade_out       := PackedByteArray()
+var fade_mults     := PackedFloat32Array()
+var flicker_flags  := PackedByteArray()
 
-## Un Dictionary por proyectil para registrar los enemigos ya impactados.
-## No puede ser PackedArray porque el tamaño varía por proyectil.
-## Se pre-asignan MAX_PROJECTILES diccionarios al inicio y se reutilizan.
-var hit_sets: Array = []
+## Diccionarios de enemies ya impactados (pre-asignados, reutilizados con .clear()).
+var hit_sets : Array = []
 
 # ════════════════════════════════════════════════════════════════════════════
-#  2. MULTIMESH + SHADER
+#  2. ARRAYS DOD — NUEVOS COMPORTAMIENTOS
+# ════════════════════════════════════════════════════════════════════════════
+
+# ── Homing ────────────────────────────────────────────────────────────────
+var is_homing        := PackedByteArray()     # 1 = activo
+var homing_strengths := PackedFloat32Array()  # rad/s — velocidad de giro máximo
+var homing_delays    := PackedFloat32Array()  # frames de vuelo recto antes de activar
+var homing_ranges    := PackedFloat32Array()  # px — radio de detección del objetivo
+
+## Velocidad escalar base para mantener la magnitud durante el giro.
+var base_speeds      := PackedFloat32Array()  # px/s
+
+# ── Rebote en límites del mundo ───────────────────────────────────────────
+var bounces_left     := PackedInt32Array()
+
+# ── Cadena (chain lightning) ──────────────────────────────────────────────
+var chain_left       := PackedInt32Array()    # saltos restantes
+var chain_ranges     := PackedFloat32Array()  # px — radio de búsqueda
+var chain_dmg_mults  := PackedFloat32Array()  # multiplicador de daño por salto
+
+# ── Explosión al morir ────────────────────────────────────────────────────
+var explodes         := PackedByteArray()
+var explode_radii    := PackedFloat32Array()
+var explode_dmg_mults:= PackedFloat32Array()
+
+# ── Split al morir ────────────────────────────────────────────────────────
+var splits           := PackedByteArray()
+var split_counts     := PackedInt32Array()
+var split_spreads    := PackedFloat32Array()  # radianes — apertura total del abanico
+
+# ── Movimiento especial ───────────────────────────────────────────────────
+var accelerations    := PackedFloat32Array()  # px/s²
+var speed_caps       := PackedFloat32Array()  # px/s (0 = sin límite)
+var sine_amps        := PackedFloat32Array()  # px — amplitud de oscilación
+var sine_freqs       := PackedFloat32Array()  # Hz
+var sine_phases      := PackedFloat32Array()  # radianes acumulados
+var size_growths     := PackedFloat32Array()  # px/s — crecimiento del radio
+
+# ── Efectos de estado (framework — sin efecto hasta extensión EnemyManager) ──
+var burn_dps_arr     := PackedFloat32Array()
+var burn_durations   := PackedFloat32Array()
+var slow_factors     := PackedFloat32Array()
+var slow_durations   := PackedFloat32Array()
+
+# ── Cola de spawns diferidos (cadena / split) ─────────────────────────────
+## Se procesan al final de _physics_process para no invalidar el bucle principal.
+var _pending_spawns  : Array = []
+
+# ════════════════════════════════════════════════════════════════════════════
+#  3. MULTIMESH + SHADER (sin cambios)
 # ════════════════════════════════════════════════════════════════════════════
 
 var _mm_instance : MultiMeshInstance2D
 var _mm          : MultiMesh
 
-## Dos círculos concéntricos (cuerpo + núcleo brillante) con suavizado de borde.
-## Soporta efecto flicker (armas de fuego) y fade-out progresivo.
 const SHADER_CODE := """
 shader_type canvas_item;
 
-// v_col: COLOR de la instancia (r,g,b = color base, a = alpha)
-// v_cd:  INSTANCE_CUSTOM       (r = inner_mult, g = flicker_rand, b = is_flicker)
 varying flat vec4 v_col;
 varying flat vec4 v_cd;
 
@@ -90,40 +122,30 @@ void fragment() {
     vec2  uv  = UV - vec2(0.5);
     float dst = length(uv);
 
-    // OUTER_UV = radius / (radius * QUAD_MULT * 0.5)
-    // Con QUAD_MULT=2.5: outer = 1.0 / (2.5 * 0.5) = 0.40
     const float OUTER = 0.40;
-
-    // Descartar pixels fuera del círculo principal (+ margen para smoothstep)
     if (dst > OUTER + 0.04) discard;
 
     vec3  col  = v_col.rgb;
     float alph = v_col.a;
 
-    // ── Efecto flicker (escopeta / armas de llama) ────────────────────
-    // Sobreescribe el color base con tonos naranja-fuego aleatorios.
     if (v_cd.b > 0.5) {
         float t = v_cd.g;
         col  = vec3(1.0, mix(0.30, 0.65, t), 0.0);
         alph = mix(0.70, 1.00, t) * v_col.a;
     }
 
-    // ── Círculo interior (núcleo brillante) ───────────────────────────
-    // inner_mult > 0 → pinta un núcleo blanco-brillante en el centro.
     float im = v_cd.r;
     if (im > 0.01 && dst <= OUTER * im) {
         col = mix(col, vec3(1.0, 1.0, 0.95), 0.70);
     }
 
-    // ── Suavizado de borde (antialiasing 1-2px) ───────────────────────
     float edge = smoothstep(OUTER + 0.02, OUTER - 0.04, dst);
-
     COLOR = vec4(col, alph * edge);
 }
 """
 
 # ════════════════════════════════════════════════════════════════════════════
-#  3. INICIALIZACIÓN
+#  4. INICIALIZACIÓN
 # ════════════════════════════════════════════════════════════════════════════
 
 func _ready() -> void:
@@ -132,25 +154,33 @@ func _ready() -> void:
 	_init_multimesh()
 
 func _init_arrays() -> void:
-	positions.resize(MAX_PROJECTILES)
-	prev_positions.resize(MAX_PROJECTILES)
-	velocities.resize(MAX_PROJECTILES)
-	damages.resize(MAX_PROJECTILES)
-	penetrations.resize(MAX_PROJECTILES)
-	lifetimes.resize(MAX_PROJECTILES)
-	max_lifetimes.resize(MAX_PROJECTILES)
-	radii.resize(MAX_PROJECTILES)
-	kb_mults.resize(MAX_PROJECTILES)
-	inner_mults.resize(MAX_PROJECTILES)
-	col_r.resize(MAX_PROJECTILES)
-	col_g.resize(MAX_PROJECTILES)
-	col_b.resize(MAX_PROJECTILES)
-	use_swept.resize(MAX_PROJECTILES)
-	fade_out.resize(MAX_PROJECTILES)
-	fade_mults.resize(MAX_PROJECTILES)
+	# Arrays base
+	positions.resize(MAX_PROJECTILES);      prev_positions.resize(MAX_PROJECTILES)
+	velocities.resize(MAX_PROJECTILES);     damages.resize(MAX_PROJECTILES)
+	penetrations.resize(MAX_PROJECTILES);   lifetimes.resize(MAX_PROJECTILES)
+	max_lifetimes.resize(MAX_PROJECTILES);  radii.resize(MAX_PROJECTILES)
+	kb_mults.resize(MAX_PROJECTILES);       inner_mults.resize(MAX_PROJECTILES)
+	col_r.resize(MAX_PROJECTILES);          col_g.resize(MAX_PROJECTILES)
+	col_b.resize(MAX_PROJECTILES);          use_swept.resize(MAX_PROJECTILES)
+	fade_out.resize(MAX_PROJECTILES);       fade_mults.resize(MAX_PROJECTILES)
 	flicker_flags.resize(MAX_PROJECTILES)
 
-	# Pre-asignar diccionarios para hit_sets — se reutilizan con .clear()
+	# Arrays nuevos — comportamientos avanzados
+	is_homing.resize(MAX_PROJECTILES);      homing_strengths.resize(MAX_PROJECTILES)
+	homing_delays.resize(MAX_PROJECTILES);  homing_ranges.resize(MAX_PROJECTILES)
+	base_speeds.resize(MAX_PROJECTILES);    bounces_left.resize(MAX_PROJECTILES)
+	chain_left.resize(MAX_PROJECTILES);     chain_ranges.resize(MAX_PROJECTILES)
+	chain_dmg_mults.resize(MAX_PROJECTILES);explodes.resize(MAX_PROJECTILES)
+	explode_radii.resize(MAX_PROJECTILES);  explode_dmg_mults.resize(MAX_PROJECTILES)
+	splits.resize(MAX_PROJECTILES);         split_counts.resize(MAX_PROJECTILES)
+	split_spreads.resize(MAX_PROJECTILES);  accelerations.resize(MAX_PROJECTILES)
+	speed_caps.resize(MAX_PROJECTILES);     sine_amps.resize(MAX_PROJECTILES)
+	sine_freqs.resize(MAX_PROJECTILES);     sine_phases.resize(MAX_PROJECTILES)
+	size_growths.resize(MAX_PROJECTILES);   burn_dps_arr.resize(MAX_PROJECTILES)
+	burn_durations.resize(MAX_PROJECTILES); slow_factors.resize(MAX_PROJECTILES)
+	slow_durations.resize(MAX_PROJECTILES)
+
+	# Pre-asignar diccionarios de hit_sets
 	hit_sets.resize(MAX_PROJECTILES)
 	for i in range(MAX_PROJECTILES):
 		hit_sets[i] = {}
@@ -159,36 +189,35 @@ func _init_multimesh() -> void:
 	_mm                        = MultiMesh.new()
 	_mm.mesh                   = QuadMesh.new()
 	_mm.mesh.size              = Vector2(1.0, 1.0)
-	_mm.use_colors             = true          # INSTANCE_COLOR por instancia
-	_mm.use_custom_data        = true          # INSTANCE_CUSTOM por instancia
+	_mm.use_colors             = true
+	_mm.use_custom_data        = true
 	_mm.instance_count         = MAX_PROJECTILES
 	_mm.visible_instance_count = 0
-	# AABB enorme para que el culling de Godot nunca corte el MultiMesh completo
 	_mm.custom_aabb            = AABB(Vector3(-100000, -100000, -1),
-	                                  Vector3(200000,  200000,   2))
-
+	                                  Vector3( 200000,  200000,  2))
 	var mat    := ShaderMaterial.new()
 	var shader := Shader.new()
 	shader.code  = SHADER_CODE
 	mat.shader   = shader
-
 	_mm_instance           = MultiMeshInstance2D.new()
 	_mm_instance.multimesh = _mm
 	_mm_instance.material  = mat
 	add_child(_mm_instance)
 
 # ════════════════════════════════════════════════════════════════════════════
-#  4. SPAWN
+#  5. SPAWN — acepta extra: Dictionary con todos los parámetros nuevos
 # ════════════════════════════════════════════════════════════════════════════
 
-## Crea un nuevo proyectil en el buffer DOD.
-## Llamar desde WeaponController en lugar de instanciar proyectile.tscn.
+## Crea un proyectil en el buffer DOD.
 ##
-## @param vel         Velocidad en px/s (ya multiplicada por 60 como en el original).
-## @param max_lt      Vida máxima EN FRAMES (@ 60fps), igual que WeaponData.max_lifetime.
-## @param inner_mult  0 = sin núcleo; 0.5 = núcleo al 50% del radio exterior.
-## @param p_fade_out  Si true, el proyectil se desvanece según fade_mult y lifetime.
-## @param p_flicker   Si true, el shader aplica efecto llama naranja.
+## @param extra  Diccionario opcional con propiedades avanzadas.
+##               Claves soportadas: homing, homing_strength, homing_delay,
+##               homing_range, bounces, chain_count, chain_range,
+##               chain_damage_mult, explodes, explosion_radius,
+##               explosion_damage_mult, splits, split_count, split_spread,
+##               acceleration, max_speed_cap, sine_amplitude, sine_frequency,
+##               size_growth, burn_dps, burn_duration, slow_factor,
+##               slow_duration, initial_hits (Dictionary de enemigos pre-golpeados).
 func spawn(
 	pos         : Vector2,
 	vel         : Vector2,
@@ -202,35 +231,85 @@ func spawn(
 	p_use_swept : bool,
 	p_fade_out  : bool,
 	fade_mult   : float,
-	p_flicker   : bool
+	p_flicker   : bool,
+	extra       : Dictionary = {}
 ) -> void:
 	if active_count >= MAX_PROJECTILES:
 		return
 
-	var i               := active_count
-	positions[i]        = pos
-	prev_positions[i]   = pos
-	velocities[i]       = vel
-	damages[i]          = damage
-	penetrations[i]     = penetration
-	lifetimes[i]        = 0.0
-	max_lifetimes[i]    = max_lt
-	radii[i]            = radius
-	kb_mults[i]         = knockback
-	inner_mults[i]      = inner_mult
-	col_r[i]            = color.r
-	col_g[i]            = color.g
-	col_b[i]            = color.b
-	use_swept[i]        = 1 if p_use_swept else 0
-	fade_out[i]         = 1 if p_fade_out  else 0
-	fade_mults[i]       = fade_mult
-	flicker_flags[i]    = 1 if p_flicker   else 0
+	var i                := active_count
+	var speed            : float = vel.length()
+
+	# ── Datos base ───────────────────────────────────────────────
+	positions[i]         = pos
+	prev_positions[i]    = pos
+	velocities[i]        = vel
+	damages[i]           = damage
+	penetrations[i]      = penetration
+	lifetimes[i]         = 0.0
+	max_lifetimes[i]     = max_lt
+	radii[i]             = radius
+	kb_mults[i]          = knockback
+	inner_mults[i]       = inner_mult
+	col_r[i]             = color.r
+	col_g[i]             = color.g
+	col_b[i]             = color.b
+	use_swept[i]         = 1 if p_use_swept else 0
+	fade_out[i]          = 1 if p_fade_out  else 0
+	fade_mults[i]        = fade_mult
+	flicker_flags[i]     = 1 if p_flicker   else 0
+
+	# ── Hit set inicial (permite que cadenas pre-excluyan enemigos) ──
 	hit_sets[i].clear()
+	var init_hits : Dictionary = extra.get("initial_hits", {})
+	if not init_hits.is_empty():
+		for k in init_hits:
+			hit_sets[i][k] = true
+
+	# ── Homing ───────────────────────────────────────────────────
+	is_homing[i]         = 1 if extra.get("homing", false) else 0
+	homing_strengths[i]  = extra.get("homing_strength", PI)      # ~180°/s
+	homing_delays[i]     = extra.get("homing_delay",    0.0)
+	homing_ranges[i]     = extra.get("homing_range",    600.0)
+	base_speeds[i]       = speed
+
+	# ── Rebote ───────────────────────────────────────────────────
+	bounces_left[i]      = extra.get("bounces", 0)
+
+	# ── Cadena ───────────────────────────────────────────────────
+	chain_left[i]        = extra.get("chain_count",      0)
+	chain_ranges[i]      = extra.get("chain_range",      220.0)
+	chain_dmg_mults[i]   = extra.get("chain_damage_mult",0.65)
+
+	# ── Explosión ────────────────────────────────────────────────
+	explodes[i]          = 1 if extra.get("explodes", false) else 0
+	explode_radii[i]     = extra.get("explosion_radius",      90.0)
+	explode_dmg_mults[i] = extra.get("explosion_damage_mult", 0.55)
+
+	# ── Split ────────────────────────────────────────────────────
+	splits[i]            = 1 if extra.get("splits", false) else 0
+	split_counts[i]      = extra.get("split_count",  3)
+	split_spreads[i]     = extra.get("split_spread", 1.2)
+
+	# ── Movimiento ───────────────────────────────────────────────
+	accelerations[i]     = extra.get("acceleration",   0.0)
+	speed_caps[i]        = extra.get("max_speed_cap",  0.0)
+	sine_amps[i]         = extra.get("sine_amplitude", 0.0)
+	sine_freqs[i]        = extra.get("sine_frequency", 2.0)
+	# Fase aleatoria para que múltiples proyectiles simultáneos no sincronicen
+	sine_phases[i]       = randf_range(0.0, TAU) if sine_amps[i] > 0.0 else 0.0
+	size_growths[i]      = extra.get("size_growth",    0.0)
+
+	# ── Efectos de estado (framework) ────────────────────────────
+	burn_dps_arr[i]      = extra.get("burn_dps",       0.0)
+	burn_durations[i]    = extra.get("burn_duration",  3.0)
+	slow_factors[i]      = extra.get("slow_factor",    0.0)
+	slow_durations[i]    = extra.get("slow_duration",  2.0)
 
 	active_count += 1
 
 # ════════════════════════════════════════════════════════════════════════════
-#  5. FÍSICA — movimiento y colisiones
+#  6. FÍSICA PRINCIPAL — movimiento y colisiones
 # ════════════════════════════════════════════════════════════════════════════
 
 func _physics_process(delta: float) -> void:
@@ -244,17 +323,48 @@ func _physics_process(delta: float) -> void:
 	var i    := 0
 
 	while i < active_count:
-		# Guardar posición anterior (necesaria para swept collision del sniper)
 		prev_positions[i] = positions[i]
-		positions[i]     += velocities[i] * delta
-		lifetimes[i]     += dt60
 
-		# Muerte por agotamiento de vida
+		# ── Homing: girar la velocidad hacia el enemigo más cercano ──
+		if is_homing[i]:
+			if homing_delays[i] > 0.0:
+				homing_delays[i] -= dt60
+			else:
+				_apply_homing(i, delta)
+
+		# ── Aceleración / desaceleración ──────────────────────────
+		if accelerations[i] != 0.0:
+			_apply_acceleration(i, delta)
+
+		# ── Movimiento base + sine perpendicular ──────────────────
+		var pos_delta : Vector2 = velocities[i] * delta
+		if sine_amps[i] > 0.0:
+			var old_phase : float = sine_phases[i]
+			sine_phases[i] += sine_freqs[i] * TAU * delta
+			var delta_sin : float = sin(sine_phases[i]) - sin(old_phase)
+			var vel_len   : float = velocities[i].length()
+			if vel_len > 0.1:
+				var perp : Vector2 = Vector2(-velocities[i].y, velocities[i].x) / vel_len
+				pos_delta += perp * delta_sin * sine_amps[i]
+
+		positions[i] += pos_delta
+		lifetimes[i] += dt60
+
+		# ── Crecimiento del radio ─────────────────────────────────
+		if size_growths[i] > 0.0:
+			radii[i] += size_growths[i] * delta
+
+		# ── Rebote en límites del mundo ───────────────────────────
+		if bounces_left[i] > 0:
+			_check_wall_bounce(i)
+
+		# ── Expiración por tiempo de vida ─────────────────────────
 		if lifetimes[i] >= max_lifetimes[i]:
+			_on_death(i, false)
 			_remove(i)
 			continue
 
-		# Detección de colisión (devuelve true si el proyectil debe destruirse)
+		# ── Detección de colisiones ───────────────────────────────
 		var killed := false
 		if use_swept[i]:
 			killed = _check_swept(i)
@@ -262,33 +372,111 @@ func _physics_process(delta: float) -> void:
 			killed = _check_normal(i)
 
 		if killed:
+			_on_death(i, true)
 			_remove(i)
 			continue
 
 		i += 1
 
+	# ── Procesar spawns diferidos (cadena / split) ────────────────
+	# Se instancian DESPUÉS del loop para no invalidar los índices.
+	for cfg in _pending_spawns:
+		if active_count < MAX_PROJECTILES:
+			spawn(cfg.pos, cfg.vel, cfg.dmg, cfg.pen, cfg.lt, cfg.rad,
+				  cfg.kb, cfg.inner, cfg.col, false,
+				  cfg.fade, cfg.fade_m, cfg.flicker, cfg.extra)
+	_pending_spawns.clear()
+
 	_render()
 
-## Colisión estándar por proximidad (pistola, escopeta, rifle, etc.)
+# ════════════════════════════════════════════════════════════════════════════
+#  7. SISTEMAS AUXILIARES DE MOVIMIENTO
+# ════════════════════════════════════════════════════════════════════════════
+
+## Gira suavemente la velocidad hacia el enemigo más cercano dentro del rango.
+func _apply_homing(idx: int, delta: float) -> void:
+	var em := GameManager.enemy_manager
+	if not is_instance_valid(em): return
+
+	var pos       : Vector2 = positions[idx]
+	# Búsqueda con hash espacial (O(1) en lugar de O(n))
+	var candidates         = em.get_enemies_near_proxy(pos, homing_ranges[idx])
+	if candidates.is_empty(): return
+
+	# Elegir el más cercano no excluido por el hit_set
+	var best_idx  : int   = -1
+	var best_dsq  : float = INF
+	for eidx in candidates:
+		if hit_sets[idx].has(eidx): continue
+		var dsq : float = pos.distance_squared_to(em.positions[eidx])
+		if dsq < best_dsq:
+			best_dsq = dsq; best_idx = eidx
+	if best_idx < 0: return
+
+	var target_dir  : Vector2 = (em.positions[best_idx] - pos).normalized()
+	var current_dir : Vector2 = velocities[idx].normalized()
+	if current_dir == Vector2.ZERO or target_dir == Vector2.ZERO: return
+
+	var angle_diff : float = current_dir.angle_to(target_dir)
+	var max_turn   : float = homing_strengths[idx] * delta      # rad/s × s = rad
+	velocities[idx] = current_dir.rotated(clampf(angle_diff, -max_turn, max_turn)) \
+					  * base_speeds[idx]
+
+## Modifica la velocidad escalar manteniendo la dirección.
+func _apply_acceleration(idx: int, delta: float) -> void:
+	var spd     : float = velocities[idx].length()
+	if spd < 0.001: return
+	var new_spd : float = spd + accelerations[idx] * delta
+	if speed_caps[idx] > 0.0:
+		new_spd = clampf(new_spd, 0.0, speed_caps[idx])
+	else:
+		new_spd = maxf(0.0, new_spd)
+	velocities[idx] *= (new_spd / spd)
+	base_speeds[idx]  = new_spd   # sincronizar para homing
+
+## Refleja la velocidad al salir de los límites del mundo.
+## Resetea el hit_set para que el proyectil rebotado pueda re-golpear enemigos.
+func _check_wall_bounce(idx: int) -> void:
+	var pos : Vector2 = positions[idx]
+	var vel : Vector2 = velocities[idx]
+	var bounced := false
+
+	if pos.x < 0.0:
+		pos.x = 0.0; vel.x = absf(vel.x); bounced = true
+	elif pos.x > GameManager.WORLD_WIDTH:
+		pos.x = GameManager.WORLD_WIDTH; vel.x = -absf(vel.x); bounced = true
+
+	if pos.y < 0.0:
+		pos.y = 0.0; vel.y = absf(vel.y); bounced = true
+	elif pos.y > GameManager.WORLD_HEIGHT:
+		pos.y = GameManager.WORLD_HEIGHT; vel.y = -absf(vel.y); bounced = true
+
+	if bounced:
+		positions[idx]    = pos
+		velocities[idx]   = vel
+		base_speeds[idx]  = vel.length()
+		bounces_left[idx] -= 1
+		hit_sets[idx].clear()   # el proyectil rebotado puede re-golpear
+
+# ════════════════════════════════════════════════════════════════════════════
+#  8. COLISIÓN — igual que v1 pero ahora el loop llama a _on_death primero
+# ════════════════════════════════════════════════════════════════════════════
+
 func _check_normal(idx: int) -> bool:
 	var pos  := positions[idx]
 	var hits = GameManager.enemy_manager.get_enemies_near_proxy(pos, radii[idx] + 16.0)
 	var vn   := velocities[idx].normalized()
 
 	for eidx in hits:
-		if hit_sets[idx].has(eidx):
-			continue
+		if hit_sets[idx].has(eidx): continue
 		hit_sets[idx][eidx] = true
 		GameManager.enemy_manager.damage_enemy(
 			eidx, float(damages[idx]), vn, 8.0 * kb_mults[idx])
 		penetrations[idx] -= 1
 		if penetrations[idx] <= 0:
-			return true   # sin más penetraciones: destruir proyectil
-
+			return true
 	return false
 
-## Colisión swept (segmento entre pos anterior y actual) para el francotirador.
-## Garantiza que proyectiles rápidos no atraviesen enemigos entre frames.
 func _check_swept(idx: int) -> bool:
 	var pa    := prev_positions[idx]
 	var pb    := positions[idx]
@@ -299,8 +487,7 @@ func _check_swept(idx: int) -> bool:
 	var hr    := radii[idx] + 14.0
 
 	for eidx in hits:
-		if hit_sets[idx].has(eidx):
-			continue
+		if hit_sets[idx].has(eidx): continue
 		var epos = GameManager.enemy_manager.positions[eidx]
 		if _point_seg_dist(epos, pa, pb) <= hr:
 			hit_sets[idx][eidx] = true
@@ -309,20 +496,147 @@ func _check_swept(idx: int) -> bool:
 			penetrations[idx] -= 1
 			if penetrations[idx] <= 0:
 				return true
-
 	return false
 
-## Distancia mínima de un punto a un segmento AB.
 func _point_seg_dist(p: Vector2, a: Vector2, b: Vector2) -> float:
 	var ab  : Vector2 = b - a
 	var lsq : float   = ab.length_squared()
-	if lsq == 0.0:
-		return p.distance_to(a)
-	var t : float = clampf((p - a).dot(ab) / lsq, 0.0, 1.0)
-	return p.distance_to(a + t * ab)
+	if lsq == 0.0: return p.distance_to(a)
+	return p.distance_to(a + clampf((p - a).dot(ab) / lsq, 0.0, 1.0) * ab)
 
 # ════════════════════════════════════════════════════════════════════════════
-#  6. RENDER — frustum culling + actualización del MultiMesh
+#  9. EFECTOS DE MUERTE — explosión, cadena, split
+##
+##  @param idx      Índice del proyectil (aún válido, _remove se llama después).
+##  @param was_hit  true = murió por impacto;  false = murió por tiempo.
+# ════════════════════════════════════════════════════════════════════════════
+
+func _on_death(idx: int, was_hit: bool) -> void:
+	var pos : Vector2 = positions[idx]
+	var vel : Vector2 = velocities[idx]
+	var em          := GameManager.enemy_manager
+
+	# ── Explosión (siempre, independientemente de la causa de muerte) ──
+	if explodes[idx] and is_instance_valid(em):
+		var er  : float = explode_radii[idx]
+		var edm : float = float(damages[idx]) * explode_dmg_mults[idx]
+		var in_r        = em.get_enemies_near_proxy(pos, er)
+		for eidx in in_r:
+			if hit_sets[idx].has(eidx): continue   # no doble daño al target final
+			var dir : Vector2 = (em.positions[eidx] - pos)
+			if dir.length_squared() > 0.001:
+				dir = dir.normalized()
+			em.damage_enemy(eidx, edm, dir, 6.0)
+
+	# ── Cadena — solo al morir por impacto ────────────────────────
+	if was_hit and chain_left[idx] > 0 and is_instance_valid(em):
+		var r      : float         = chain_ranges[idx]
+		var cands                  = em.get_enemies_near_proxy(pos, r)
+		var best_i : int   = -1
+		var best_d : float = INF
+		for eidx in cands:
+			if hit_sets[idx].has(eidx): continue
+			var d : float = pos.distance_squared_to(em.positions[eidx])
+			if d < best_d:
+				best_d = d; best_i = eidx
+		if best_i >= 0:
+			var target_pos : Vector2 = em.positions[best_i]
+			var dir_c      : Vector2 = (target_pos - pos).normalized()
+			var extra_c    := _build_chain_extra(idx)
+			_pending_spawns.append({
+				"pos":    pos,
+				"vel":    dir_c * base_speeds[idx],
+				"dmg":    maxi(1, int(float(damages[idx]) * chain_dmg_mults[idx])),
+				"pen":    1,
+				"lt":     max_lifetimes[idx] * 0.75,
+				"rad":    radii[idx],
+				"kb":     kb_mults[idx],
+				"inner":  inner_mults[idx],
+				"col":    Color(col_r[idx], col_g[idx], col_b[idx]),
+				"fade":   true,
+				"fade_m": 1.2,
+				"flicker":flicker_flags[idx] != 0,
+				"extra":  extra_c,
+			})
+
+	# ── Split — siempre al morir ──────────────────────────────────
+	if splits[idx] and split_counts[idx] > 0:
+		var n       : int   = split_counts[idx]
+		var spread  : float = split_spreads[idx]
+		var base_a  : float = vel.angle() if vel.length_squared() > 0.1 else 0.0
+		var extra_s := _build_split_extra(idx)
+		for k in range(n):
+			var t     : float = float(k) / float(maxi(1, n - 1)) - 0.5  # -0.5..0.5
+			var ang   : float = base_a + (spread * t if n > 1 else 0.0)
+			_pending_spawns.append({
+				"pos":    pos,
+				"vel":    Vector2(cos(ang), sin(ang)) * base_speeds[idx] * 0.85,
+				"dmg":    damages[idx],
+				"pen":    1,
+				"lt":     max_lifetimes[idx] * 0.5,
+				"rad":    radii[idx] * 0.7,
+				"kb":     kb_mults[idx],
+				"inner":  inner_mults[idx],
+				"col":    Color(col_r[idx], col_g[idx], col_b[idx]),
+				"fade":   true,
+				"fade_m": 1.5,
+				"flicker":flicker_flags[idx] != 0,
+				"extra":  extra_s,
+			})
+
+# ── Helpers para construir el extra de cadena / split ────────────────────
+
+## Proyectil de cadena: hereda homing/explosión pero reduce cadenas y borra sine.
+func _build_chain_extra(idx: int) -> Dictionary:
+	var e := _build_base_extra(idx)
+	e["bounces"]          = 0           # sin rebotes para cadenas
+	e["chain_count"]      = chain_left[idx] - 1   # un eslabón menos
+	e["splits"]           = false       # las cadenas no se dividen
+	e["sine_amplitude"]   = 0.0        # viaje directo
+	e["homing_delay"]     = 0.0        # targeting inmediato
+	e["initial_hits"]     = hit_sets[idx].duplicate()  # no re-golpear enemigos previos
+	return e
+
+## Proyectil de split: hereda homing/aceleración pero sin recursión de split/cadena.
+func _build_split_extra(idx: int) -> Dictionary:
+	var e := _build_base_extra(idx)
+	e["chain_count"]      = 0
+	e["splits"]           = false       # sin splits recursivos
+	e["explodes"]         = false       # sin explosión en splits (muy OP)
+	e["sine_amplitude"]   = 0.0
+	return e
+
+## Copia todos los datos del proyectil como diccionario extra.
+func _build_base_extra(idx: int) -> Dictionary:
+	return {
+		"homing":                is_homing[idx] != 0,
+		"homing_strength":       homing_strengths[idx],
+		"homing_delay":          homing_delays[idx],
+		"homing_range":          homing_ranges[idx],
+		"bounces":               bounces_left[idx],
+		"chain_count":           chain_left[idx],
+		"chain_range":           chain_ranges[idx],
+		"chain_damage_mult":     chain_dmg_mults[idx],
+		"explodes":              explodes[idx] != 0,
+		"explosion_radius":      explode_radii[idx],
+		"explosion_damage_mult": explode_dmg_mults[idx],
+		"splits":                splits[idx] != 0,
+		"split_count":           split_counts[idx],
+		"split_spread":          split_spreads[idx],
+		"acceleration":          accelerations[idx],
+		"max_speed_cap":         speed_caps[idx],
+		"sine_amplitude":        sine_amps[idx],
+		"sine_frequency":        sine_freqs[idx],
+		"size_growth":           size_growths[idx],
+		"burn_dps":              burn_dps_arr[idx],
+		"burn_duration":         burn_durations[idx],
+		"slow_factor":           slow_factors[idx],
+		"slow_duration":         slow_durations[idx],
+		"initial_hits":          {},
+	}
+
+# ════════════════════════════════════════════════════════════════════════════
+#  10. RENDER — frustum culling manual + actualización del MultiMesh (sin cambios)
 # ════════════════════════════════════════════════════════════════════════════
 
 func _render() -> void:
@@ -340,52 +654,40 @@ func _render() -> void:
 
 	for i in range(active_count):
 		var pos := positions[i]
-
-		# Frustum culling: saltar proyectiles fuera del área visible
 		if absf(pos.x - p_pos.x) > half_x or absf(pos.y - p_pos.y) > half_y:
 			continue
 
-		# Transformación: posición + escala uniforme según radio
 		var qs : float = radii[i] * QUAD_MULT
 		_mm.set_instance_transform_2d(vis,
 			Transform2D(0.0, Vector2(qs, qs), 0.0, pos))
 
-		# Alpha: 1.0 por defecto, desvanecido si fade_out=true
 		var alpha := 1.0
 		if fade_out[i]:
 			var progress := 1.0 - (lifetimes[i] / maxf(1.0, max_lifetimes[i]))
 			alpha = clampf(progress * fade_mults[i], 0.0, 1.0)
 
-		# Color de instancia: r,g,b = color del arma, a = alpha
 		_mm.set_instance_color(vis, Color(col_r[i], col_g[i], col_b[i], alpha))
-
-		# Datos personalizados: inner_mult, flicker (aleatorio por frame), flag
 		_mm.set_instance_custom_data(vis, Color(
 			inner_mults[i],
 			randf() if flicker_flags[i] else 0.0,
 			float(flicker_flags[i]),
 			0.0
 		))
-
 		vis += 1
 
 	_mm.visible_instance_count = vis
 
 # ════════════════════════════════════════════════════════════════════════════
-#  7. UTILIDADES INTERNAS
+#  11. ELIMINACIÓN — swap-back O(1) con todos los arrays
 # ════════════════════════════════════════════════════════════════════════════
 
-## Elimina el proyectil en idx usando swap-back O(1).
-## El proyectil del final del buffer se mueve a idx, sin desplazar el resto.
 func _remove(idx: int) -> void:
 	active_count -= 1
-
 	if idx == active_count:
-		# Era el último: solo limpiar hit_set
 		hit_sets[idx].clear()
 		return
 
-	# Mover datos del último al slot liberado
+	# ── Arrays base ──────────────────────────────────────────────
 	positions[idx]      = positions[active_count]
 	prev_positions[idx] = prev_positions[active_count]
 	velocities[idx]     = velocities[active_count]
@@ -404,23 +706,49 @@ func _remove(idx: int) -> void:
 	fade_mults[idx]     = fade_mults[active_count]
 	flicker_flags[idx]  = flicker_flags[active_count]
 
-	# Intercambiar hit_sets por referencia (O(1), sin copiar contenidos)
-	var recycled        = hit_sets[idx]
-	hit_sets[idx]        = hit_sets[active_count]
+	# ── Arrays nuevos — comportamientos ──────────────────────────
+	is_homing[idx]         = is_homing[active_count]
+	homing_strengths[idx]  = homing_strengths[active_count]
+	homing_delays[idx]     = homing_delays[active_count]
+	homing_ranges[idx]     = homing_ranges[active_count]
+	base_speeds[idx]       = base_speeds[active_count]
+	bounces_left[idx]      = bounces_left[active_count]
+	chain_left[idx]        = chain_left[active_count]
+	chain_ranges[idx]      = chain_ranges[active_count]
+	chain_dmg_mults[idx]   = chain_dmg_mults[active_count]
+	explodes[idx]          = explodes[active_count]
+	explode_radii[idx]     = explode_radii[active_count]
+	explode_dmg_mults[idx] = explode_dmg_mults[active_count]
+	splits[idx]            = splits[active_count]
+	split_counts[idx]      = split_counts[active_count]
+	split_spreads[idx]     = split_spreads[active_count]
+	accelerations[idx]     = accelerations[active_count]
+	speed_caps[idx]        = speed_caps[active_count]
+	sine_amps[idx]         = sine_amps[active_count]
+	sine_freqs[idx]        = sine_freqs[active_count]
+	sine_phases[idx]       = sine_phases[active_count]
+	size_growths[idx]      = size_growths[active_count]
+	burn_dps_arr[idx]      = burn_dps_arr[active_count]
+	burn_durations[idx]    = burn_durations[active_count]
+	slow_factors[idx]      = slow_factors[active_count]
+	slow_durations[idx]    = slow_durations[active_count]
+
+	# ── hit_sets — intercambiar referencias O(1) ──────────────────
+	var recycled          = hit_sets[idx]
+	hit_sets[idx]          = hit_sets[active_count]
 	hit_sets[active_count] = recycled
-	recycled.clear()   # limpiar el que queda al final para reutilización futura
+	recycled.clear()
 
 # ════════════════════════════════════════════════════════════════════════════
-#  8. API PÚBLICA
+#  12. API PÚBLICA
 # ════════════════════════════════════════════════════════════════════════════
 
-## Número de proyectiles activos (para debug_panel).
 func get_active_count() -> int:
 	return active_count
 
-## Vacía todos los proyectiles (útil al limpiar la escena).
 func clear() -> void:
 	active_count = 0
+	_pending_spawns.clear()
 	for i in range(MAX_PROJECTILES):
 		hit_sets[i].clear()
 	_mm.visible_instance_count = 0

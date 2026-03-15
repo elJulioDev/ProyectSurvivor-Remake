@@ -48,6 +48,7 @@ grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
 script = ExtResource("7_h725n")
+metadata/_edit_use_anchors_ = true
 
 [node name="Crosshair" type="Control" parent="HUD" unique_id=1883081703]
 layout_mode = 3
