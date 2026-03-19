@@ -33,24 +33,24 @@ var positions   := PackedVector2Array()
 var velocities  := PackedVector2Array()
 var knockbacks  := PackedVector2Array()
 
-var healths       := PackedFloat32Array()
-var max_healths := PackedFloat32Array()
-var speeds      := PackedFloat32Array()
-var sizes       := PackedFloat32Array()
-var hit_flashes := PackedFloat32Array()
-var lanes       := PackedFloat32Array() 
+var healths           := PackedFloat32Array()
+var max_healths       := PackedFloat32Array()
+var speeds            := PackedFloat32Array()
+var sizes             := PackedFloat32Array()
+var hit_flashes       := PackedFloat32Array()
+var lanes             := PackedFloat32Array()
 var bleed_intensities := PackedFloat32Array()
 var bleed_cooldowns   := PackedFloat32Array()
 
-var types       := PackedInt32Array()
-var damages     := PackedInt32Array()
-var points      := PackedInt32Array()
+var types   := PackedInt32Array()
+var damages := PackedInt32Array()
+var points  := PackedInt32Array()
 
 var grid_head := PackedInt32Array()
 var grid_next := PackedInt32Array()
 
 # ════════════════════════════════════════════════════════════════════════════
-#  3. MOTOR DE DIBUJADO GPU (Con padding para barras de vida)
+#  3. MOTOR DE DIBUJADO GPU
 # ════════════════════════════════════════════════════════════════════════════
 var multimesh_instance: MultiMeshInstance2D
 var multimesh: MultiMesh
@@ -68,18 +68,16 @@ void fragment() {
 	int type_idx = int(round(custom_data.r));
 	vec3 base_color = enemy_colors[type_idx];
 	vec3 border_color = base_color * 0.5;
-	vec2 uv = UV - 0.5; 
-	
+	vec2 uv = UV - 0.5;
+
 	vec4 final_color = vec4(0.0);
 	if (abs(uv.x) <= 0.35 && abs(uv.y) <= 0.35) {
 		final_color = vec4(base_color, 1.0);
-		if (abs(uv.x) < 0.12 && abs(uv.y) < 0.12) { final_color.rgb = border_color;
-		}
-		if (abs(uv.x) > 0.31 || abs(uv.y) > 0.31) { final_color.rgb = border_color; }
-		
+		if (abs(uv.x) < 0.12 && abs(uv.y) < 0.12) { final_color.rgb = border_color; }
+		if (abs(uv.x) > 0.31 || abs(uv.y) > 0.31)  { final_color.rgb = border_color; }
 		final_color.rgb = mix(final_color.rgb, vec3(1.0), custom_data.b);
 	}
-	
+
 	if (UV.y > 0.88 && UV.y < 0.98 && custom_data.a > 0.5) {
 		if (UV.x > 0.15 && UV.x < 0.85) {
 			final_color = vec4(0.1, 0.1, 0.1, 1.0);
@@ -87,7 +85,7 @@ void fragment() {
 				float hp_bar_x = (UV.x - 0.17) / 0.66;
 				if (hp_bar_x < custom_data.g) {
 					vec3 hp_col = custom_data.g < 0.3 ?
-					vec3(1.0, 0.0, 0.0) : vec3(1.0, 0.6, 0.0);
+						vec3(1.0, 0.0, 0.0) : vec3(1.0, 0.6, 0.0);
 					final_color.rgb = hp_col;
 				} else {
 					final_color.rgb = vec3(0.25, 0.0, 0.0);
@@ -95,21 +93,17 @@ void fragment() {
 			}
 		}
 	}
-	
+
 	COLOR = final_color;
 }
 """
 
-# ── Caché de referencias (evitar get_first_node_in_group cada frame) ──────
-## Se inicializa en _ready() vía call_deferred para asegurar que todos los
-## nodos estén en el árbol antes de buscarlos.
 var _particle_sys : Node = null
 
 func _ready() -> void:
 	add_to_group("enemy_manager")
 	_init_arrays()
 	_init_multimesh()
-	# Cachear el sistema de partículas después de que todo esté listo
 	call_deferred("_cache_refs")
 
 func _cache_refs() -> void:
@@ -128,23 +122,24 @@ func _init_arrays() -> void:
 func _init_multimesh() -> void:
 	multimesh = MultiMesh.new()
 	multimesh.mesh = QuadMesh.new()
-	multimesh.mesh.size = Vector2(1.0, 1.0) 
+	multimesh.mesh.size = Vector2(1.0, 1.0)
 	multimesh.use_custom_data = true
 	multimesh.instance_count = MAX_ENEMIES
 	multimesh.visible_instance_count = 0
 	multimesh.custom_aabb = AABB(Vector3(-100000, -100000, -1), Vector3(200000, 200000, 2))
-	
+
 	var custom_mat = ShaderMaterial.new()
 	var shader = Shader.new()
 	shader.code = SHADER_CODE
 	custom_mat.shader = shader
-	
+
 	var colors_array = PackedVector3Array()
 	colors_array.resize(6)
 	for key in TYPES:
-		colors_array[TYPES[key]["id"]] = Vector3(TYPES[key]["color"].r, TYPES[key]["color"].g, TYPES[key]["color"].b)
+		colors_array[TYPES[key]["id"]] = Vector3(
+			TYPES[key]["color"].r, TYPES[key]["color"].g, TYPES[key]["color"].b)
 	custom_mat.set_shader_parameter("enemy_colors", colors_array)
-	
+
 	multimesh_instance = MultiMeshInstance2D.new()
 	multimesh_instance.multimesh = multimesh
 	multimesh_instance.material = custom_mat
@@ -155,48 +150,45 @@ func _init_multimesh() -> void:
 # ════════════════════════════════════════════════════════════════════════════
 func get_active_count() -> int: return active_count
 
-func spawn(pos: Vector2, type_name: String, speed_multiplier: float, health_mult: float, damage_mult: float) -> void:
+func spawn(pos: Vector2, type_name: String, speed_multiplier: float,
+		   health_mult: float, damage_mult: float) -> void:
 	if active_count >= MAX_ENEMIES: return
-		
-	var idx = active_count
+
+	var idx  = active_count
 	var data = TYPES[type_name]
-	
-	var base_size = 36.0 
-	var base_spd = 100.0
-	var h = data["health"] * health_mult
-	
-	positions[idx] = pos
+	var h    = data["health"] * health_mult
+
+	positions[idx]  = pos
 	velocities[idx] = Vector2.ZERO
 	knockbacks[idx] = Vector2.ZERO
-	healths[idx] = h
-	max_healths[idx] = h
-	speeds[idx] = base_spd * speed_multiplier * data["speed_mult"] * randf_range(0.9, 1.1)
-	sizes[idx] = base_size * data["size_mult"]
-	types[idx] = data["id"]
-	damages[idx] = maxi(1, int(data["damage"] * damage_mult))
-	points[idx] = data["points"]
-	hit_flashes[idx] = 0.0
-	lanes[idx] = sin(pos.x * 0.0071 + pos.y * 0.0053) 
-	
+	healths[idx]    = h
+	max_healths[idx]= h
+	speeds[idx]     = 100.0 * speed_multiplier * data["speed_mult"] * randf_range(0.9, 1.1)
+	sizes[idx]      = 36.0 * data["size_mult"]
+	types[idx]      = data["id"]
+	damages[idx]    = maxi(1, int(data["damage"] * damage_mult))
+	points[idx]     = data["points"]
+	hit_flashes[idx]= 0.0
+	lanes[idx]      = sin(pos.x * 0.0071 + pos.y * 0.0053)
 	bleed_intensities[idx] = 0.0
-	bleed_cooldowns[idx] = 0.0
+	bleed_cooldowns[idx]   = 0.0
 
 	active_count += 1
 
 func teleport_distant(player_pos: Vector2, player_vel: Vector2 = Vector2.ZERO) -> void:
-	const MAX_DIST_SQ  : float = 1900.0 * 1900.0
-	const SPAWN_R_MIN  : float = 1300.0
-	const SPAWN_R_MAX  : float = 1600.0
+	const MAX_DIST_SQ      : float = 1900.0 * 1900.0
+	const SPAWN_R_MIN      : float = 1300.0
+	const SPAWN_R_MAX      : float = 1600.0
 	const VEL_THRESHOLD_SQ : float = 400.0
 
-	var moving   : bool    = player_vel.length_squared() > VEL_THRESHOLD_SQ
-	var fwd_ang  : float   = player_vel.angle() if moving else 0.0
+	var moving  : bool  = player_vel.length_squared() > VEL_THRESHOLD_SQ
+	var fwd_ang : float = player_vel.angle() if moving else 0.0
 
 	for i in range(active_count):
 		if positions[i].distance_squared_to(player_pos) <= MAX_DIST_SQ:
 			continue
 
-		var angle  : float
+		var angle : float
 		if moving:
 			var roll := randf()
 			if roll < 0.60:
@@ -209,67 +201,73 @@ func teleport_distant(player_pos: Vector2, player_vel: Vector2 = Vector2.ZERO) -
 			angle = randf() * TAU
 
 		var radius : float = randf_range(SPAWN_R_MIN, SPAWN_R_MAX)
-		positions[i] = player_pos + Vector2(cos(angle), sin(angle)) * radius
+		positions[i]  = player_pos + Vector2(cos(angle), sin(angle)) * radius
 		velocities[i] = Vector2.ZERO
-		knockbacks[i]  = Vector2.ZERO
-		hit_flashes[i] = 0.0
+		knockbacks[i] = Vector2.ZERO
+		hit_flashes[i]= 0.0
 
 # ════════════════════════════════════════════════════════════════════════════
 #  5. LÓGICA DE MOVIMIENTO MULTI-HILO
 # ════════════════════════════════════════════════════════════════════════════
 func _physics_process(delta: float) -> void:
 	_cleanup_dead_enemies()
-	if active_count == 0: 
+	if active_count == 0:
 		multimesh.visible_instance_count = 0
 		return
-		
+
 	var player = get_tree().get_first_node_in_group("player")
 	if not player: return
-	
+
 	var p_pos = player.global_position
 	var p_vel = player.velocity if "velocity" in player else Vector2.ZERO
-	
+
 	if Engine.get_process_frames() % 30 == 0:
 		teleport_distant(p_pos, p_vel)
-	
+
 	_build_grid()
-	
+
 	_current_batch = (_current_batch + 1) % BATCH_COUNT
-	
-	var group_id = WorkerThreadPool.add_group_task(_process_enemy_movement.bind(delta, p_pos, p_vel, _current_batch), active_count)
+	var group_id = WorkerThreadPool.add_group_task(
+		_process_enemy_movement.bind(delta, p_pos, p_vel, _current_batch), active_count)
 	WorkerThreadPool.wait_for_group_task_completion(group_id)
-	
-	var render_hp_dist_sq = 550.0 * 550.0 
-	
-	# Intentar cachear particle_sys si aún no está asignado
+
+	var render_hp_dist_sq : float = 550.0 * 550.0
+
 	if not is_instance_valid(_particle_sys):
 		_particle_sys = get_tree().get_first_node_in_group("blood_particles")
-	
-	var viewport = get_viewport()
-	var cam = viewport.get_camera_2d()
-	var cam_zoom = cam.zoom if cam else Vector2.ONE
+
+	var viewport  = get_viewport()
+	var cam       = viewport.get_camera_2d()
+	var cam_zoom  = cam.zoom if cam else Vector2.ONE
 	var view_size = viewport.get_visible_rect().size / cam_zoom
-	
-	var half_screen_x = (view_size.x * 0.5) + 300.0
-	var half_screen_y = (view_size.y * 0.5) + 300.0
-	
-	var visible_count = 0
-	var drips_this_frame = 0
-	const MAX_DRIPS_PER_FRAME = 3
-	
+
+	# ── FIX CULLING ───────────────────────────────────────────────────────
+	# Usar el centro REAL de la cámara (post-clamp) en lugar de p_pos.
+	# Cuando el jugador está en una esquina, la cámara queda fija y
+	# su centro difiere de la posición del jugador. Sin este fix los
+	# enemigos desaparecen en la mitad de la pantalla visible.
+	var cam_center : Vector2 = cam.get_screen_center_position() if cam else p_pos
+
+	var half_screen_x : float = view_size.x * 0.5 + 300.0
+	var half_screen_y : float = view_size.y * 0.5 + 300.0
+
+	var visible_count     := 0
+	var drips_this_frame  := 0
+	const MAX_DRIPS_PER_FRAME := 3
+
 	for i in range(active_count):
 		var pos = positions[i]
 
-		var dist_sq = pos.distance_squared_to(p_pos)
+		# Daño al jugador — sigue usando p_pos (distancia real al jugador)
+		var dist_sq  = pos.distance_squared_to(p_pos)
 		var min_dist = (sizes[i] * 0.4) + 12.0
 		if dist_sq < min_dist * min_dist:
 			if player.has_method("take_damage"):
 				player.take_damage(damages[i])
-		
-		# SISTEMA DE GOTEO (solo si hay bleed acumulado por proyectiles)
-		# El aura NO acumula bleed_intensities → no genera drips innecesarios
+
+		# Sistema de goteo
 		if bleed_intensities[i] > 0.0:
-			bleed_intensities[i] -= 0.3 * delta * 60.0 
+			bleed_intensities[i] -= 0.3 * delta * 60.0
 			if bleed_intensities[i] <= 0.0:
 				bleed_intensities[i] = 0.0
 			else:
@@ -279,20 +277,22 @@ func _physics_process(delta: float) -> void:
 						_particle_sys.create_blood_drip(pos, bleed_intensities[i])
 					bleed_cooldowns[i] = maxf(2.0, 20.0 - (bleed_intensities[i] * 0.8))
 					drips_this_frame += 1
-		
-		# FRUSTUM CULLING MANUAL
-		var dist_x = abs(pos.x - p_pos.x)
-		var dist_y = abs(pos.y - p_pos.y)
-		
+
+		# ── Frustum culling basado en centro de cámara ─────────────────
+		var dist_x = absf(pos.x - cam_center.x)
+		var dist_y = absf(pos.y - cam_center.y)
+
 		if dist_x < half_screen_x and dist_y < half_screen_y:
 			var quad_size = sizes[i] * 1.4
 			var t = Transform2D(0, Vector2(quad_size, quad_size), 0, pos)
 			multimesh.set_instance_transform_2d(visible_count, t)
-			
-			var hp_pct = clampf(healths[i] / max_healths[i], 0.0, 1.0)
-			var show_hp = 1.0 if healths[i] < max_healths[i] and (dist_x*dist_x + dist_y*dist_y) < render_hp_dist_sq else 0.0
-			multimesh.set_instance_custom_data(visible_count, Color(float(types[i]), hp_pct, hit_flashes[i], show_hp))
-			
+
+			var hp_pct  = clampf(healths[i] / max_healths[i], 0.0, 1.0)
+			var show_hp = 1.0 if healths[i] < max_healths[i] \
+				and (dist_x * dist_x + dist_y * dist_y) < render_hp_dist_sq else 0.0
+			multimesh.set_instance_custom_data(visible_count,
+				Color(float(types[i]), hp_pct, hit_flashes[i], show_hp))
+
 			visible_count += 1
 
 	multimesh.visible_instance_count = visible_count
@@ -304,82 +304,83 @@ func _build_grid() -> void:
 		var cx = clampi(int((positions[i].x + GRID_OFFSET) / GRID_CELL_SIZE), 0, GRID_WIDTH - 1)
 		var cy = clampi(int((positions[i].y + GRID_OFFSET) / GRID_CELL_SIZE), 0, GRID_HEIGHT - 1)
 		var cell_idx = cx + cy * GRID_WIDTH
-		grid_next[i] = grid_head[cell_idx]
+		grid_next[i]      = grid_head[cell_idx]
 		grid_head[cell_idx] = i
 
-func _process_enemy_movement(i: int, delta: float, p_pos: Vector2, p_vel: Vector2, current_batch: int) -> void:
+func _process_enemy_movement(i: int, delta: float, p_pos: Vector2,
+							  p_vel: Vector2, current_batch: int) -> void:
 	var pos = positions[i]
 	var spd = speeds[i]
-	
+
 	if i % BATCH_COUNT == current_batch:
 		var p_vel_frame = p_vel / 60.0
-		var raw_dist = pos.distance_to(p_pos)
-		var predict_t = minf(18.0, raw_dist / maxf(1.0, spd * 2.5))
-		var target_pos = p_pos + p_vel_frame * (predict_t * 0.55)
-		var dir = pos.direction_to(target_pos)
+		var raw_dist    = pos.distance_to(p_pos)
+		var predict_t   = minf(18.0, raw_dist / maxf(1.0, spd * 2.5))
+		var target_pos  = p_pos + p_vel_frame * (predict_t * 0.55)
+		var dir         = pos.direction_to(target_pos)
 		if dir == Vector2.ZERO: dir = Vector2.RIGHT
-		
-		var push_x = 0.0
-		var push_y = 0.0
-		var sep_radius = sizes[i] * 0.4 * 4.0 
-		var cr_sq = sep_radius * sep_radius
-		var count = 0
-		
+
+		var push_x     = 0.0
+		var push_y     = 0.0
+		var sep_radius = sizes[i] * 0.4 * 4.0
+		var cr_sq      = sep_radius * sep_radius
+		var count      = 0
+
 		var cx = clampi(int((pos.x + GRID_OFFSET) / GRID_CELL_SIZE), 0, GRID_WIDTH - 1)
 		var cy = clampi(int((pos.y + GRID_OFFSET) / GRID_CELL_SIZE), 0, GRID_HEIGHT - 1)
-		
+
 		for dy in range(-1, 2):
 			for dx in range(-1, 2):
 				var nx = clampi(cx + dx, 0, GRID_WIDTH - 1)
 				var ny = clampi(cy + dy, 0, GRID_HEIGHT - 1)
 				var enemy_idx = grid_head[nx + ny * GRID_WIDTH]
-				
 				while enemy_idx != -1 and count < 4:
 					if enemy_idx != i:
 						var other_pos = positions[enemy_idx]
-						var odx = pos.x - other_pos.x
-						var ody = pos.y - other_pos.y
-						var odist_sq = odx * odx + ody * ody
-						
+						var odx       = pos.x - other_pos.x
+						var ody       = pos.y - other_pos.y
+						var odist_sq  = odx * odx + ody * ody
 						if odist_sq > 0.0001 and odist_sq < cr_sq:
-							var odist = sqrt(odist_sq)
+							var odist  = sqrt(odist_sq)
 							var overlap = sep_radius - odist
-							var ps = overlap * (overlap / sep_radius) * 0.18
+							var ps      = overlap * (overlap / sep_radius) * 0.18
 							push_x += (odx / odist) * ps
 							push_y += (ody / odist) * ps
-							count += 1
+							count  += 1
 					enemy_idx = grid_next[enemy_idx]
-					
+
 		if count > 1:
 			var inv_sqrt = 1.0 / sqrt(float(count))
 			push_x *= inv_sqrt
 			push_y *= inv_sqrt
-			
-		var push_sq = push_x * push_x + push_y * push_y
+
+		var push_sq  = push_x * push_x + push_y * push_y
 		var max_push = spd * 1.2
 		if push_sq > max_push * max_push:
 			var inv_pm = max_push / sqrt(push_sq)
 			push_x *= inv_pm
 			push_y *= inv_pm
 
-		var perp = Vector2(-dir.y, dir.x)
+		var perp        = Vector2(-dir.y, dir.x)
 		var lat_strength = 0.38 * spd
-		var lane_vel = perp * lanes[i] * lat_strength
-		
+		var lane_vel    = perp * lanes[i] * lat_strength
+
 		var target_vx = dir.x * spd + push_x + lane_vel.x
 		var target_vy = dir.y * spd + push_y + lane_vel.y
-		
+
 		var lerp_f = 0.40
-		var cv = velocities[i]
-		velocities[i] = Vector2(cv.x * (1.0 - lerp_f) + target_vx * lerp_f, cv.y * (1.0 - lerp_f) + target_vy * lerp_f)
-	
+		var cv     = velocities[i]
+		velocities[i] = Vector2(
+			cv.x * (1.0 - lerp_f) + target_vx * lerp_f,
+			cv.y * (1.0 - lerp_f) + target_vy * lerp_f)
+
 	if knockbacks[i].length_squared() > 0.01:
 		knockbacks[i] *= pow(0.88, delta * 60.0)
 		if knockbacks[i].length() < 0.1: knockbacks[i] = Vector2.ZERO
-			
+
 	positions[i] += (velocities[i] + knockbacks[i]) * delta
-	
-	if hit_flashes[i] > 0.0: 
+
+	if hit_flashes[i] > 0.0:
 		hit_flashes[i] = maxf(0.0, hit_flashes[i] - delta * 6.0)
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -388,12 +389,8 @@ func _process_enemy_movement(i: int, delta: float, p_pos: Vector2, p_vel: Vector
 
 func get_all_type_counts() -> Dictionary:
 	var counts : Dictionary = {
-		"small":    0,
-		"normal":   0,
-		"large":    0,
-		"tank":     0,
-		"exploder": 0,
-		"spitter":  0,
+		"small": 0, "normal": 0, "large": 0,
+		"tank": 0, "exploder": 0, "spitter": 0,
 	}
 	for i in range(active_count):
 		match types[i]:
@@ -407,9 +404,9 @@ func get_all_type_counts() -> Dictionary:
 
 func get_enemies_near_proxy(pos: Vector2, radius: float) -> PackedInt32Array:
 	var result := PackedInt32Array()
-	var r2 = radius * radius
-	var min_cx = clampi(int((pos.x - radius + GRID_OFFSET) / GRID_CELL_SIZE), 0, GRID_WIDTH - 1)
-	var max_cx = clampi(int((pos.x + radius + GRID_OFFSET) / GRID_CELL_SIZE), 0, GRID_WIDTH - 1)
+	var r2     = radius * radius
+	var min_cx = clampi(int((pos.x - radius + GRID_OFFSET) / GRID_CELL_SIZE), 0, GRID_WIDTH  - 1)
+	var max_cx = clampi(int((pos.x + radius + GRID_OFFSET) / GRID_CELL_SIZE), 0, GRID_WIDTH  - 1)
 	var min_cy = clampi(int((pos.y - radius + GRID_OFFSET) / GRID_CELL_SIZE), 0, GRID_HEIGHT - 1)
 	var max_cy = clampi(int((pos.y + radius + GRID_OFFSET) / GRID_CELL_SIZE), 0, GRID_HEIGHT - 1)
 	for cy in range(min_cy, max_cy + 1):
@@ -421,48 +418,34 @@ func get_enemies_near_proxy(pos: Vector2, radius: float) -> PackedInt32Array:
 				enemy_idx = grid_next[enemy_idx]
 	return result
 
-## damage_enemy — MODIFICADO: parámetro skip_blood para el aura de espinas
-##
-## @param skip_blood  true  → solo hit_flash, sin partículas ni bleed acumulado.
-##                           Usar para el aura y cualquier daño por segundo continuo.
-##                   false → comportamiento completo (proyectiles, explosiones, etc.)
 func damage_enemy(idx: int, amount: float, hit_dir: Vector2 = Vector2.ZERO,
 				  knockback_force: float = 0.0, skip_blood: bool = false) -> void:
 	if idx < 0 or idx >= active_count: return
 	if healths[idx] <= 0: return
-
 	if is_nan(amount): amount = 0.0
-	
+
 	if is_nan(hit_dir.x) or is_nan(hit_dir.y) or hit_dir.length_squared() < 0.001:
 		hit_dir = Vector2.ZERO
 	else:
 		hit_dir = hit_dir.normalized()
 
-	healths[idx] -= amount
+	healths[idx]     -= amount
+	hit_flashes[idx]  = 1.0
 
-	# hit_flash SIEMPRE (es el "impulso de color blanco" que el aura también muestra)
-	hit_flashes[idx] = 1.0
-
-	# El bleed solo se acumula en golpes reales (proyectiles), NO en DOT del aura.
-	# Así el aura no genera goteo continuo en todos los enemigos del radio.
 	if not skip_blood:
 		bleed_intensities[idx] = minf(40.0, bleed_intensities[idx] + amount)
-	
+
 	if knockback_force > 0.0 and hit_dir != Vector2.ZERO:
-		var size_factor = 40.0 / maxf(1.0, sizes[idx])
+		var size_factor    = 40.0 / maxf(1.0, sizes[idx])
 		var frame_knockback = hit_dir * knockback_force * size_factor * 60.0
-		
 		if not is_nan(frame_knockback.x) and not is_nan(frame_knockback.y):
 			knockbacks[idx] += frame_knockback
 			if knockbacks[idx].length() > 500.0:
 				knockbacks[idx] = knockbacks[idx].limit_length(500.0)
 
-	# Partículas de sangre: SOLO si skip_blood=false (proyectiles, no aura)
 	if not skip_blood:
-		# Re-cachear si se perdió la referencia (cambio de escena, etc.)
 		if not is_instance_valid(_particle_sys):
 			_particle_sys = get_tree().get_first_node_in_group("blood_particles")
-
 		if is_instance_valid(_particle_sys):
 			var dmg_ratio := clampf(amount / max_healths[idx] * 6.0, 0.0, 1.0)
 			_particle_sys.create_blood_splatter(positions[idx], hit_dir, 1.2, 8, dmg_ratio)
@@ -471,23 +454,28 @@ func damage_enemy(idx: int, amount: float, hit_dir: Vector2 = Vector2.ZERO,
 
 func _kill_enemy(idx: int) -> void:
 	enemy_killed.emit(positions[idx], points[idx], types[idx])
-
 	if is_instance_valid(_particle_sys):
-		_particle_sys.create_viscera_explosion(positions[idx], sizes[idx]/40.0)
+		_particle_sys.create_viscera_explosion(positions[idx], sizes[idx] / 40.0)
 
 	active_count -= 1
 	if idx != active_count:
-		positions[idx] = positions[active_count]; velocities[idx] = velocities[active_count]
-		knockbacks[idx] = knockbacks[active_count]; healths[idx] = healths[active_count]
-		max_healths[idx] = max_healths[active_count]; speeds[idx] = speeds[active_count]
-		sizes[idx] = sizes[active_count]; types[idx] = types[active_count]
-		damages[idx] = damages[active_count]; points[idx] = points[active_count]
-		hit_flashes[idx] = hit_flashes[active_count]; lanes[idx] = lanes[active_count]
+		positions[idx]         = positions[active_count]
+		velocities[idx]        = velocities[active_count]
+		knockbacks[idx]        = knockbacks[active_count]
+		healths[idx]           = healths[active_count]
+		max_healths[idx]       = max_healths[active_count]
+		speeds[idx]            = speeds[active_count]
+		sizes[idx]             = sizes[active_count]
+		types[idx]             = types[active_count]
+		damages[idx]           = damages[active_count]
+		points[idx]            = points[active_count]
+		hit_flashes[idx]       = hit_flashes[active_count]
+		lanes[idx]             = lanes[active_count]
 		bleed_intensities[idx] = bleed_intensities[active_count]
 		bleed_cooldowns[idx]   = bleed_cooldowns[active_count]
 
 func _cleanup_dead_enemies() -> void:
-	var i = 0
+	var i := 0
 	while i < active_count:
 		if healths[i] <= 0:
 			_kill_enemy(i)

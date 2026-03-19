@@ -1,44 +1,32 @@
 extends Camera2D
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  camera.gd — ProyectSurvivor
+#  camera.gd — ProyectSurvivor  (estilo Vampire Survivors)
 #
-#  Traducción de camera.py (utils/camera.py del Pygame):
-#    · Lerp frame-rate independent: 1 - (1 - 0.08)^dt
-#    · Shake con decay frame-rate independent: intensity *= 0.88^dt
-#    · Paralaje del ratón: ×0.4 dividido por zoom
-#    · Clamp dentro de los límites del mundo
-#
-#  INSTALACIÓN:
-#    1. Selecciona el nodo Camera2D en gameplay.tscn
-#    2. Arrastra este script al campo "Script" en el Inspector
-#    3. Asegúrate de que el nodo Camera2D tiene "Current" = true
-#
-#  El script busca al jugador automáticamente via el grupo "player".
-#  No necesitas conectar nada manualmente.
+#  Cambios respecto a la versión anterior:
+#    · Eliminado el parallax del ratón — la cámara sigue al jugador
+#      de forma estática, igual que en VS.
+#    · Lerp ligeramente más rápido (0.12) para respuesta inmediata.
+#    · El clamp a los límites del mundo se mantiene; cuando el
+#      jugador está en la esquina, la cámara se queda en el borde
+#      correcto y get_screen_center_position() refleja ese valor,
+#      lo que el SpawnManager usa para colocar enemigos fuera de
+#      la vista real (no del jugador).
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-const LERP_SPEED  := 0.08       # idéntico a camera.py
-const SHAKE_DECAY := 0.88       # idéntico a camera.py
-const MOUSE_PARA  := 0.4        # factor de paralaje del ratón
+const LERP_SPEED  : float = 0.12   # más rápido que 0.08 para feel VS
+const SHAKE_DECAY : float = 0.88
 
 var shake_intensity : float = 0.0
 
-var _player : Node2D = null
-var _vp_half: Vector2 = Vector2.ZERO
+var _player  : Node2D  = null
+var _vp_half : Vector2 = Vector2.ZERO
 
 func _ready() -> void:
-	# Tamaño de medio viewport (para calcular límites)
 	_vp_half = get_viewport_rect().size * 0.5
-
-	# Buscar jugador por grupo — funciona aunque el orden de _ready varíe
 	_find_player()
-
-	# Si el jugador ya existe, hacer snap instantáneo (sin lerp)
 	if is_instance_valid(_player):
 		global_position = _player.global_position
-	
-	# Activar esta cámara
 	make_current()
 
 func _find_player() -> void:
@@ -46,7 +34,6 @@ func _find_player() -> void:
 	if players.size() > 0:
 		_player = players[0]
 	else:
-		# El jugador puede no estar listo todavía; reintentamos el siguiente frame
 		await get_tree().process_frame
 		players = get_tree().get_nodes_in_group("player")
 		if players.size() > 0:
@@ -57,28 +44,28 @@ func _physics_process(delta: float) -> void:
 	if not is_instance_valid(_player):
 		return
 
-	# Actualizar la mitad del viewport en tiempo real
-	# por si el jugador maximiza o redimensiona la ventana
 	_vp_half = get_viewport_rect().size * 0.5
 
-	# ── Target: posición del jugador + paralaje del ratón ────────
-	var mouse_screen := get_viewport().get_mouse_position() - _vp_half
-	var z  := maxf(zoom.x, 0.01)
-	var tx := _player.global_position.x + mouse_screen.x / z * MOUSE_PARA
-	var ty := _player.global_position.y + mouse_screen.y / z * MOUSE_PARA
+	# ── Target: posición del jugador (sin parallax de ratón) ──────
+	# VS sigue al jugador directamente — sin desplazamiento del mouse.
+	var tx : float = _player.global_position.x
+	var ty : float = _player.global_position.y
 
 	# ── Lerp frame-rate independent ──────────────────────────────
-	# Fórmula de camera.py:  lerp_dt = 1 - (1 - lerp_speed)^dt
-	var dt      := delta * 60.0
-	var lerp_dt := 1.0 - pow(1.0 - LERP_SPEED, dt)
+	var dt      : float = delta * 60.0
+	var lerp_dt : float = 1.0 - pow(1.0 - LERP_SPEED, dt)
 	global_position.x += (tx - global_position.x) * lerp_dt
 	global_position.y += (ty - global_position.y) * lerp_dt
 
-    # ── Clamp a los límites del mundo ────────────────────────────
-	var half_w := _vp_half.x / z
-	var half_h := _vp_half.y / z
-	global_position.x = clampf(global_position.x, half_w, GameManager.WORLD_WIDTH - half_w)
-	global_position.y = clampf(global_position.y, half_h, GameManager.WORLD_HEIGHT - half_h)
+	# ── Clamp a los límites del mundo ────────────────────────────
+	# Al clampear aquí, get_screen_center_position() devolverá la
+	# posición real de la cámara, que SpawnManager usará para
+	# colocar enemigos justo fuera de la vista correcta.
+	var z      : float = maxf(zoom.x, 0.01)
+	var half_w : float = _vp_half.x / z
+	var half_h : float = _vp_half.y / z
+	global_position.x = clampf(global_position.x, half_w,  GameManager.WORLD_WIDTH  - half_w)
+	global_position.y = clampf(global_position.y, half_h,  GameManager.WORLD_HEIGHT - half_h)
 
 	# ── Shake frame-rate independent ─────────────────────────────
 	if shake_intensity > 0.1:
@@ -89,7 +76,7 @@ func _physics_process(delta: float) -> void:
 		shake_intensity *= pow(SHAKE_DECAY, dt)
 		if shake_intensity < 0.1:
 			shake_intensity = 0.0
-			offset = Vector2.ZERO
+			offset          = Vector2.ZERO
 	else:
 		offset = Vector2.ZERO
 
@@ -99,8 +86,7 @@ func add_shake(amount: float) -> void:
 	shake_intensity = minf(shake_intensity + amount, 20.0)
 
 func snap_to_player() -> void:
-	## Teletransporta la cámara al jugador sin lerp (usar en initialize).
 	if is_instance_valid(_player):
 		global_position = _player.global_position
-		offset = Vector2.ZERO
+		offset          = Vector2.ZERO
 		shake_intensity = 0.0
