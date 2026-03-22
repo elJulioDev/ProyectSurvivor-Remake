@@ -9,6 +9,7 @@ extends Node2D
 @onready var gem_manager:            GemManager      = $GemManager
 @onready var upgrade_layer:          CanvasLayer     = $UpgradeLayer
 @onready var projectile_manager:     ProjectileManager = $ProjectileManager
+@onready var enemy_proj_manager : EnemyProjectileManager = $EnemyProjectileManager
 
 # ── Estado ───────────────────────────────────────────────────────────
 var score:     int   = 0
@@ -43,6 +44,8 @@ func _ready() -> void:
 	spawn_manager.setup(enemy_manager)
 
 	enemy_manager.enemy_killed.connect(_on_enemy_killed)
+	enemy_manager.enemy_exploded.connect(_on_enemy_exploded)
+	enemy_manager.enemy_shot.connect(_on_enemy_shot)
 
 	_setup_camera()
 
@@ -193,3 +196,24 @@ func _format_time(seconds: float) -> String:
 
 func setup(_data: Dictionary) -> void:
 	pass
+
+# ════════════════════════════════════════════════════════════════
+#  CALLBACKS DE HABILIDADES ESPECIALES
+# ════════════════════════════════════════════════════════════════
+
+func _on_enemy_exploded(pos: Vector2, damage: float, radius: float) -> void:
+    # Sacudida de cámara proporcional al daño
+	if camera.has_method("add_shake"):
+		camera.add_shake(clampf(damage * 0.18, 4.0, 14.0))
+
+    # Flash naranja de explosión (sistema de partículas / efecto visual)
+	var particles := get_tree().get_first_node_in_group("blood_particles")
+	if is_instance_valid(particles):
+        # Usar viscera_explosion si existe, o añadir un método de explosión
+		if particles.has_method("create_viscera_explosion"):
+			particles.create_viscera_explosion(pos, radius / 40.0)
+
+func _on_enemy_shot(pos: Vector2, angle: float) -> void:
+    # Delegar al EnemyProjectileManager
+	if is_instance_valid(enemy_proj_manager):
+		enemy_proj_manager.spawn(pos, angle)

@@ -8,6 +8,7 @@
 [ext_resource type="Script" uid="uid://c0lmc2e4y7cja" path="res://ui/hud/crosshair.gd" id="8_c5pgr"]
 [ext_resource type="Script" uid="uid://u6ogjnwe8y1q" path="res://core/managers/EnemyManager.gd" id="9_rgnag"]
 [ext_resource type="Script" uid="uid://bdvhc4dq54saq" path="res://core/managers/spawn_manager.gd" id="10_ooudo"]
+[ext_resource type="Script" uid="uid://nouqrp4ybg4q" path="res://core/managers/enemy_projectile_manager.gd" id="11_ctvyo"]
 [ext_resource type="Script" uid="uid://dvdv3q458pa1t" path="res://core/managers/gem_manager.gd" id="12_2i4lx"]
 [ext_resource type="Script" uid="uid://c0qd5hgf6wahq" path="res://core/managers/projectile_manager.gd" id="12_qixtg"]
 
@@ -64,3 +65,6 @@ script = ExtResource("9_rgnag")
 
 [node name="ProjectileManager" type="Node2D" parent="." unique_id=866148791]
 script = ExtResource("12_qixtg")
+
+[node name="EnemyProjectileManager" type="Node2D" parent="." unique_id=312579278]
+script = ExtResource("11_ctvyo")

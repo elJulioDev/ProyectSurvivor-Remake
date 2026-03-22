@@ -55,6 +55,34 @@ var grid_next := PackedInt32Array()
 var multimesh_instance: MultiMeshInstance2D
 var multimesh: MultiMesh
 
+# ════════════════════════════════════════════════════════════════════════════
+#  NUEVAS CONSTANTES Y ARRAYS PARA HABILIDADES ESPECIALES
+# ════════════════════════════════════════════════════════════════════════════
+
+# Exploder
+const EXPLODER_CHARGE_DIST   := 170.0   # px — empieza a cargar
+const EXPLODER_TRIGGER_DIST  :=  85.0   # px — explota
+const EXPLODER_TRIGGER_CHARGE := 0.80   # nivel mínimo de carga para explotar
+const EXPLODER_RADIUS        := 140.0   # radio de la explosión
+const EXPLODER_DAMAGE        :=  65.0   # daño al jugador
+const EXPLODER_ENEMY_DAMAGE  :=  40.0   # daño a enemigos cercanos
+const EXPLODER_CHARGE_RATE   :=   0.035 # por frame @ 60 fps
+const EXPLODER_DISCHARGE_RATE :=  0.025
+
+# Spitter
+const SPITTER_PREF_DIST      := 270.0   # distancia preferida del jugador
+const SPITTER_SHOOT_RANGE    := 530.0   # rango máximo de disparo
+const SPITTER_COOLDOWN_BASE  := 360.0   # frames entre disparos (6 s @ 60)
+const SPITTER_COOLDOWN_MIN   :=  90.0   # tras mejoras de velocidad de oleada
+
+# Arrays DOD nuevos
+var charge_levels     := PackedFloat32Array()   # exploders: 0.0–1.0
+var special_cooldowns := PackedFloat32Array()   # spitters: frames restantes
+
+# Señales para gameplay.gd
+signal enemy_exploded(pos: Vector2, damage: float, radius: float)
+signal enemy_shot(pos: Vector2, angle: float)
+
 const SHADER_CODE = """
 shader_type canvas_item;
 uniform vec3 enemy_colors[6];
@@ -118,6 +146,8 @@ func _init_arrays() -> void:
 	grid_next.resize(MAX_ENEMIES)
 	bleed_intensities.resize(MAX_ENEMIES)
 	bleed_cooldowns.resize(MAX_ENEMIES)
+	charge_levels.resize(MAX_ENEMIES)
+	special_cooldowns.resize(MAX_ENEMIES)
 
 func _init_multimesh() -> void:
 	multimesh = MultiMesh.new()
@@ -172,7 +202,8 @@ func spawn(pos: Vector2, type_name: String, speed_multiplier: float,
 	lanes[idx]      = sin(pos.x * 0.0071 + pos.y * 0.0053)
 	bleed_intensities[idx] = 0.0
 	bleed_cooldowns[idx]   = 0.0
-
+	charge_levels[idx]    = 0.0
+	special_cooldowns[idx] = randf_range(0.0, SPITTER_COOLDOWN_BASE * 0.5)
 	active_count += 1
 
 func teleport_distant(player_pos: Vector2, player_vel: Vector2 = Vector2.ZERO) -> void:
@@ -230,6 +261,8 @@ func _physics_process(delta: float) -> void:
 	var group_id = WorkerThreadPool.add_group_task(
 		_process_enemy_movement.bind(delta, p_pos, p_vel, _current_batch), active_count)
 	WorkerThreadPool.wait_for_group_task_completion(group_id)
+	# Procesar habilidades especiales (hilo principal — accede a player y señales)
+	_process_specials(p_pos, delta)
 
 	var render_hp_dist_sq : float = 550.0 * 550.0
 
@@ -290,12 +323,83 @@ func _physics_process(delta: float) -> void:
 			var hp_pct  = clampf(healths[i] / max_healths[i], 0.0, 1.0)
 			var show_hp = 1.0 if healths[i] < max_healths[i] \
 				and (dist_x * dist_x + dist_y * dist_y) < render_hp_dist_sq else 0.0
+			# Para exploders: usar hit_flash para mostrar la carga naranja
+			var flash_val : float = hit_flashes[i]
+			if types[i] == 4:
+				flash_val = maxf(flash_val, charge_levels[i] * 0.75)
 			multimesh.set_instance_custom_data(visible_count,
-				Color(float(types[i]), hp_pct, hit_flashes[i], show_hp))
+                Color(float(types[i]), hp_pct, flash_val, show_hp))
 
 			visible_count += 1
 
 	multimesh.visible_instance_count = visible_count
+
+func _process_specials(player_pos: Vector2, delta: float) -> void:
+	var player := get_tree().get_first_node_in_group("player")
+	for i in range(active_count):
+		match types[i]:
+			4: _process_exploder(i, player_pos, player)
+			5: _process_spitter(i, player_pos, delta)
+
+# ─── EXPLODER ────────────────────────────────────────────────────────────
+func _process_exploder(idx: int, player_pos: Vector2, player) -> void:
+	if healths[idx] <= 0.0: return
+	var pos    : Vector2 = positions[idx]
+	var dist_sq: float   = pos.distance_squared_to(player_pos)
+
+    # Carga cuando está cerca
+	if dist_sq < EXPLODER_CHARGE_DIST * EXPLODER_CHARGE_DIST:
+		charge_levels[idx] = minf(1.0, charge_levels[idx] + EXPLODER_CHARGE_RATE)
+	else:
+		charge_levels[idx] = maxf(0.0, charge_levels[idx] - EXPLODER_DISCHARGE_RATE)
+
+    # Explotar si está suficientemente cargado Y muy cerca
+	if charge_levels[idx] >= EXPLODER_TRIGGER_CHARGE \
+	    and dist_sq < EXPLODER_TRIGGER_DIST * EXPLODER_TRIGGER_DIST:
+		_trigger_explosion(idx, player_pos, player)
+
+func _trigger_explosion(idx: int, player_pos: Vector2, player) -> void:
+	var pos := positions[idx]
+
+    # Daño al jugador con falloff
+	var dist_to_player := pos.distance_to(player_pos)
+	if dist_to_player <= EXPLODER_RADIUS and is_instance_valid(player):
+		var falloff := maxf(0.2, 1.0 - (dist_to_player / EXPLODER_RADIUS) * 0.7)
+		if player.has_method("take_damage"):
+			player.take_damage(EXPLODER_DAMAGE * falloff)
+
+    # Daño y knockback a enemigos cercanos (excepto a sí mismo)
+	var nearby := get_enemies_near_proxy(pos, EXPLODER_RADIUS)
+	for eidx in nearby:
+		if eidx == idx: continue
+		var dir := (positions[eidx] - pos)
+		if dir.length_squared() > 0.01: dir = dir.normalized()
+		damage_enemy(eidx, EXPLODER_ENEMY_DAMAGE, dir, 18.0)
+
+    # Señal → gameplay.gd crea el flash de pantalla y partículas
+	enemy_exploded.emit(pos, EXPLODER_DAMAGE, EXPLODER_RADIUS)
+
+    # Matar al exploder
+	healths[idx] = 0.0
+
+# ─── SPITTER ─────────────────────────────────────────────────────────────
+func _process_spitter(idx: int, player_pos: Vector2, delta: float) -> void:
+	if healths[idx] <= 0.0: return
+
+    # Actualizar cooldown
+	if special_cooldowns[idx] > 0.0:
+		special_cooldowns[idx] -= delta * 60.0  # convertir a frames
+		return
+	
+	var pos    : Vector2 = positions[idx]
+	var dist_sq: float   = pos.distance_squared_to(player_pos)
+	
+	if dist_sq > SPITTER_SHOOT_RANGE * SPITTER_SHOOT_RANGE: return
+
+    # Disparar proyectil ácido
+	var angle := (player_pos - pos).angle()
+	enemy_shot.emit(pos, angle)
+	special_cooldowns[idx] = SPITTER_COOLDOWN_BASE
 
 func _build_grid() -> void:
 	grid_head.fill(-1)
@@ -473,6 +577,8 @@ func _kill_enemy(idx: int) -> void:
 		lanes[idx]             = lanes[active_count]
 		bleed_intensities[idx] = bleed_intensities[active_count]
 		bleed_cooldowns[idx]   = bleed_cooldowns[active_count]
+		charge_levels[idx]     = charge_levels[active_count]
+		special_cooldowns[idx] = special_cooldowns[active_count]
 
 func _cleanup_dead_enemies() -> void:
 	var i := 0
