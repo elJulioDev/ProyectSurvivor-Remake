@@ -2,6 +2,7 @@ extends CharacterBody2D
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #  player.gd — ProyectSurvivor
+#  CAMBIOS: velocidad reducida a estilo Vampire Survivors
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 signal died
@@ -10,14 +11,16 @@ signal health_changed(current: float, maximum: float)
 signal xp_changed(current: int, next_level: int)
 
 const PLAYER_SIZE    := 20
-const BASE_MAX_SPEED := 360.0
-const BASE_ACCEL     := 60.0
-const FRICTION       := 0.85
-const SPEED_DEADZONE := 6.0
+
+# ── Velocidad estilo Vampire Survivors (más lento, más táctico) ──
+const BASE_MAX_SPEED := 210.0   # era 360 — ahora similar a VS
+const BASE_ACCEL     := 38.0    # era 60  — aceleración más suave
+const FRICTION       := 0.88    # era 0.85 — más deslizamiento natural
+const SPEED_DEADZONE := 4.0
 
 const DASH_DURATION_BASE := 12.0 / 60.0
 const DASH_COOLDOWN_BASE := 45.0 / 60.0
-const DASH_SPEED         := 1440.0
+const DASH_SPEED         := 1100.0  # era 1440 — dash también proporcional
 const DASH_BUFFER_SECS   :=  9.0 / 60.0
 const MAX_GHOSTS         := 5
 
@@ -37,7 +40,6 @@ var is_alive         : bool  = true
 var level            : int   = 1
 var experience       : float = 0.0
 var experience_next  : float = 50.0
-## Alias para compatibilidad con hud.gd
 var experience_next_level : float :
 	get: return experience_next
 	set(v): experience_next = v
@@ -67,7 +69,7 @@ var lifesteal_chance : float = 0.0
 var lifesteal        : float = 5.0
 
 # ── Estado interno ────────────────────────────────────────────────
-var dash_unlocked      : bool  = false   # bloqueado al inicio
+var dash_unlocked      : bool  = false
 var dash_active        : bool  = false
 var dash_duration_mult : float = 1.0
 var dash_cooldown_mult : float = 1.0
@@ -107,7 +109,6 @@ var current_weapon_index  : int = 0
 
 func _ready() -> void:
 	add_to_group("player")
-	# Solo la pistola al inicio; las demás se desbloquean con upgrades
 	add_weapon("Pistol")
 	add_weapon("AssaultRifle")
 	add_weapon("Shotgun")
@@ -189,7 +190,6 @@ func _handle_movement(delta: float) -> void:
 
 		velocity = _dash_dir * DASH_SPEED
 
-		# Ninja Dash: eliminar enemigos al contacto durante el dash
 		if ninja_dash and is_instance_valid(GameManager.enemy_manager):
 			var hits = GameManager.enemy_manager.get_enemies_near_proxy(
 				global_position, float(PLAYER_SIZE) * 1.5)
@@ -233,16 +233,14 @@ func _process_aura(delta: float) -> void:
 		return
 	if not is_instance_valid(GameManager.enemy_manager):
 		return
- 
-	# DPS continuo — skip_blood=true → solo hit_flash, sin partículas de sangre
+
 	var enemies_in_range = GameManager.enemy_manager.get_enemies_near_proxy(
 		global_position, aura_radius)
- 
+
 	for idx in enemies_in_range:
 		GameManager.enemy_manager.damage_enemy(
 			idx, aura_damage * delta, Vector2.ZERO, 0.0, true)
- 
-	# Pulso de knockback periódico — skip_blood=true (solo fuerza, sin sangre)
+
 	if aura_knockback > 0.0:
 		_aura_pulse_timer += delta
 		if _aura_pulse_timer >= aura_knockback_interval:
@@ -385,26 +383,22 @@ func _draw() -> void:
 
 	var half := float(PLAYER_SIZE) * 0.5
 
-	# ── Aura de Espinas ───────────────────────────────────────────
 	if aura_damage > 0.0:
 		var pulse := sin(_aura_vis_timer * 2.5) * 0.5 + 0.5
 		draw_circle(Vector2.ZERO, aura_radius,
 			Color(0.58, 0.0, 1.0, 0.06 + pulse * 0.04))
 		draw_arc(Vector2.ZERO, aura_radius, 0.0, TAU, 64,
 			Color(0.78, 0.2, 1.0, 0.25 + pulse * 0.20), 2.0)
-		# Arco de progreso del pulso de knockback
 		if aura_knockback > 0.0:
 			var pulse_progress := clampf(_aura_pulse_timer / aura_knockback_interval, 0.0, 1.0)
 			draw_arc(Vector2.ZERO, aura_radius * 0.93,
 				0.0, TAU * pulse_progress, 48,
 				Color(1.0, 0.4, 1.0, 0.55), 3.0)
 
-	# ── Parpadeo de invulnerabilidad ──────────────────────────────
 	if _invuln_timer > 0.0 and _damage_flash_timer <= 0.0:
 		if int(_invuln_timer * 60.0) % 6 < 3:
 			return
 
-	# ── Fantasmas del dash ────────────────────────────────────────
 	if dash_active and _ghost_positions.size() > 0:
 		var n := _ghost_positions.size()
 		for i in range(n):
@@ -418,13 +412,11 @@ func _draw() -> void:
 				var ghost_tip := lpos + Vector2(cos(g["angle"]), sin(g["angle"])) * half * 2.5
 				draw_line(lpos, ghost_tip, gc, 2.0)
 
-	# ── Borde ninja dash ──────────────────────────────────────────
 	if ninja_dash and dash_unlocked:
 		draw_rect(Rect2(Vector2(-half - 2.0, -half - 2.0),
 						Vector2(half * 2.0 + 4.0, half * 2.0 + 4.0)),
 				  Color(0.63, 0.0, 1.0), false, 2.0)
 
-	# ── Cuerpo ────────────────────────────────────────────────────
 	var body_color := Color.WHITE
 	if _damage_flash_timer > 0.0:
 		var t := _damage_flash_timer / DAMAGE_FLASH_SECS

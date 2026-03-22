@@ -2,9 +2,9 @@ extends Node
 class_name SpawnManager
 
 ## ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-##  SpawnManager v4 — 30 minutos, dificultad progresiva
+##  SpawnManager v5 — Cap reducido a 1000, ritmo ajustado VS-style
 
-const HARD_CAP         := 2000
+const HARD_CAP         := 1000   # era 2000 — cap máximo en pantalla
 const SPAWNS_PER_FRAME :=    2
 const FALLBACK_RADIUS_MIN := 1300.0
 const FALLBACK_RADIUS_MAX := 1700.0
@@ -12,7 +12,8 @@ const VIEWPORT_MARGIN     :=  120.0
 const TELEPORT_INTERVAL   :=    3.0
 
 # ════════════════════════════════════════════════════════════════
-#  TABLA DE OLEADAS — 12 oleadas en 30 minutos
+#  TABLA DE OLEADAS
+#  Quotas ajustadas para cap 1000 con ritmo VS (progresión más suave)
 # ════════════════════════════════════════════════════════════════
 
 const WAVE_MINUTES : Array[float] = [
@@ -20,99 +21,99 @@ const WAVE_MINUTES : Array[float] = [
 ]
 
 const WAVE_TABLE : Array[Dictionary] = [
-    # ── Oleada 0 (0:00) ─ Tutorial suave ──────────────────────────
+    # ── Oleada 0 (0:00) ─ Tutorial muy suave ──────────────────────
     {
-        "small":   {"quota": 15, "interval": 2.0},
-        "normal":  {"quota":  5, "interval": 4.0},
+        "small":   {"quota": 12, "interval": 2.5},
+        "normal":  {"quota":  4, "interval": 5.0},
     },
     # ── Oleada 1 (1:00) ───────────────────────────────────────────
     {
-        "small":   {"quota": 22, "interval": 1.6},
-        "normal":  {"quota": 10, "interval": 3.0},
-        "exploder":{"quota":  3, "interval": 6.0},
+        "small":   {"quota": 18, "interval": 2.0},
+        "normal":  {"quota":  8, "interval": 3.5},
+        "exploder":{"quota":  2, "interval": 7.0},
     },
     # ── Oleada 2 (2:00) ───────────────────────────────────────────
     {
-        "small":   {"quota": 30, "interval": 1.3},
-        "normal":  {"quota": 14, "interval": 2.5},
-        "exploder":{"quota":  6, "interval": 5.0},
+        "small":   {"quota": 24, "interval": 1.6},
+        "normal":  {"quota": 12, "interval": 2.8},
+        "exploder":{"quota":  4, "interval": 6.0},
     },
     # ── Oleada 3 (3:00) ───────────────────────────────────────────
     {
-        "small":   {"quota": 38, "interval": 1.1},
-        "normal":  {"quota": 18, "interval": 2.0},
-        "large":   {"quota":  4, "interval": 8.0},
-        "exploder":{"quota":  8, "interval": 4.5},
+        "small":   {"quota": 30, "interval": 1.4},
+        "normal":  {"quota": 15, "interval": 2.5},
+        "large":   {"quota":  3, "interval": 9.0},
+        "exploder":{"quota":  6, "interval": 5.0},
     },
     # ── Oleada 4 (5:00) ─ Spitter entra ───────────────────────────
     {
-        "small":   {"quota": 45, "interval": 0.9},
-        "normal":  {"quota": 22, "interval": 1.8},
-        "large":   {"quota":  9, "interval": 6.0},
-        "spitter": {"quota":  4, "interval": 7.0},
-        "exploder":{"quota": 10, "interval": 4.0},
+        "small":   {"quota": 36, "interval": 1.2},
+        "normal":  {"quota": 18, "interval": 2.2},
+        "large":   {"quota":  7, "interval": 7.0},
+        "spitter": {"quota":  3, "interval": 8.0},
+        "exploder":{"quota":  8, "interval": 4.5},
     },
     # ── Oleada 5 (7:00) ───────────────────────────────────────────
     {
-        "small":   {"quota": 50, "interval": 0.8},
-        "normal":  {"quota": 26, "interval": 1.5},
-        "large":   {"quota": 15, "interval": 5.0},
-        "spitter": {"quota":  8, "interval": 5.5},
-        "exploder":{"quota": 12, "interval": 3.5},
+        "small":   {"quota": 40, "interval": 1.0},
+        "normal":  {"quota": 22, "interval": 2.0},
+        "large":   {"quota": 12, "interval": 6.0},
+        "spitter": {"quota":  6, "interval": 6.5},
+        "exploder":{"quota": 10, "interval": 4.0},
     },
     # ── Oleada 6 (10:00) ─ Tank entra ─────────────────────────────
     {
-        "small":   {"quota": 55, "interval": 0.7},
-        "normal":  {"quota": 30, "interval": 1.2},
-        "large":   {"quota": 22, "interval": 4.0},
-        "spitter": {"quota": 12, "interval": 4.5},
-        "exploder":{"quota": 15, "interval": 3.0},
-        "tank":    {"quota":  2, "interval":15.0},
+        "small":   {"quota": 42, "interval": 1.0},
+        "normal":  {"quota": 25, "interval": 1.8},
+        "large":   {"quota": 18, "interval": 5.0},
+        "spitter": {"quota": 10, "interval": 5.5},
+        "exploder":{"quota": 12, "interval": 3.5},
+        "tank":    {"quota":  2, "interval":18.0},
     },
     # ── Oleada 7 (13:00) ──────────────────────────────────────────
     {
-        "small":   {"quota": 55, "interval": 0.7},
-        "normal":  {"quota": 32, "interval": 1.0},
-        "large":   {"quota": 28, "interval": 3.5},
-        "spitter": {"quota": 16, "interval": 4.0},
-        "exploder":{"quota": 18, "interval": 2.5},
-        "tank":    {"quota":  4, "interval":12.0},
+        "small":   {"quota": 42, "interval": 1.0},
+        "normal":  {"quota": 26, "interval": 1.5},
+        "large":   {"quota": 22, "interval": 4.5},
+        "spitter": {"quota": 13, "interval": 5.0},
+        "exploder":{"quota": 14, "interval": 3.0},
+        "tank":    {"quota":  3, "interval":15.0},
     },
     # ── Oleada 8 (17:00) ──────────────────────────────────────────
     {
-        "small":   {"quota": 50, "interval": 0.8},
-        "normal":  {"quota": 28, "interval": 1.0},
-        "large":   {"quota": 35, "interval": 3.0},
-        "spitter": {"quota": 20, "interval": 3.5},
-        "exploder":{"quota": 22, "interval": 2.2},
-        "tank":    {"quota":  6, "interval":10.0},
+        "small":   {"quota": 38, "interval": 1.1},
+        "normal":  {"quota": 22, "interval": 1.5},
+        "large":   {"quota": 28, "interval": 4.0},
+        "spitter": {"quota": 16, "interval": 4.5},
+        "exploder":{"quota": 18, "interval": 2.8},
+        "tank":    {"quota":  5, "interval":12.0},
     },
-    # ── Oleada 9 (20:00) ─ Caos total ─────────────────────────────
+    # ── Oleada 9 (20:00) ─ Caos controlado ────────────────────────
     {
-        "small":   {"quota": 40, "interval": 0.9},
-        "normal":  {"quota": 25, "interval": 1.0},
-        "large":   {"quota": 50, "interval": 2.5},
-        "spitter": {"quota": 25, "interval": 3.0},
-        "exploder":{"quota": 25, "interval": 1.8},
-        "tank":    {"quota": 10, "interval": 8.0},
+        "small":   {"quota": 30, "interval": 1.2},
+        "normal":  {"quota": 20, "interval": 1.5},
+        "large":   {"quota": 40, "interval": 3.5},
+        "spitter": {"quota": 20, "interval": 4.0},
+        "exploder":{"quota": 20, "interval": 2.5},
+        "tank":    {"quota":  8, "interval":10.0},
     },
-    # ── Oleada 10 (23:00) ─ Apocalipsis temprano ──────────────────
+    # ── Oleada 10 (23:00) ─────────────────────────────────────────
     {
-        "small":   {"quota": 35, "interval": 1.0},
-        "normal":  {"quota": 20, "interval": 1.0},
-        "large":   {"quota": 60, "interval": 2.2},
-        "spitter": {"quota": 30, "interval": 2.5},
-        "exploder":{"quota": 30, "interval": 1.5},
-        "tank":    {"quota": 14, "interval": 6.0},
+        "small":   {"quota": 25, "interval": 1.3},
+        "normal":  {"quota": 16, "interval": 1.5},
+        "large":   {"quota": 48, "interval": 3.0},
+        "spitter": {"quota": 24, "interval": 3.5},
+        "exploder":{"quota": 24, "interval": 2.2},
+        "tank":    {"quota": 11, "interval": 8.0},
     },
     # ── Oleada 11 (27:00) ─ Final ─────────────────────────────────
     {
-        "small":   {"quota": 25, "interval": 1.2},
-        "normal":  {"quota": 15, "interval": 1.0},
-        "large":   {"quota": 70, "interval": 2.0},
-        "spitter": {"quota": 35, "interval": 2.0},
-        "exploder":{"quota": 35, "interval": 1.2},
-        "tank":    {"quota": 18, "interval": 5.0},
+        "small":   {"quota": 18, "interval": 1.5},
+        "normal":  {"quota": 12, "interval": 1.5},
+        "large":   {"quota": 55, "interval": 2.8},
+        "spitter": {"quota": 28, "interval": 3.0},
+        "exploder":{"quota": 28, "interval": 2.0},
+        "tank":    {"quota": 14, "interval": 7.0},
     },
 ]
 
@@ -216,7 +217,8 @@ func _do_spawn(type_name: String, player_level: int) -> void:
         _enemy_manager = get_tree().get_first_node_in_group("enemy_manager")
         if not is_instance_valid(_enemy_manager): return
 
-    var speed_mult       : float = minf(2.8, 1.0 + difficulty_level * 0.11)
+    # Escalado de dificultad — velocidad limitada para feel VS
+    var speed_mult       : float = minf(2.2, 1.0 + difficulty_level * 0.09)  # era 2.8/0.11
     var time_health_mult : float = minf(5.5, 1.0 + (difficulty_level - 1.0) * 0.32)
     var level_factor     : int   = maxi(0, player_level - 1)
     var health_mult      : float = minf(10.0, time_health_mult * (1.0 + float(level_factor) * 0.05))
@@ -226,7 +228,7 @@ func _do_spawn(type_name: String, player_level: int) -> void:
     _enemy_manager.spawn(pos, type_name, speed_mult, health_mult, damage_mult)
 
 # ════════════════════════════════════════════════════════════════
-#  POSICIÓN DE SPAWN (usa cam.get_screen_center_position())
+#  POSICIÓN DE SPAWN
 # ════════════════════════════════════════════════════════════════
 
 func _get_spawn_position() -> Vector2:
@@ -318,20 +320,20 @@ func _get_interpolated_quotas(minutes: float) -> Dictionary:
     return result
 
 # ════════════════════════════════════════════════════════════════
-#  CAP DINÁMICO — extendido a 30 min
+#  CAP DINÁMICO — máximo 1000 enemigos
 # ════════════════════════════════════════════════════════════════
 
 func _calc_base_cap(minutes: float) -> float:
     if is_mobile:
-        if minutes < 3.0:    return 20.0  + minutes * 8.0
-        elif minutes < 12.0: return 44.0  + (minutes - 3.0)  * 55.0
-        elif minutes < 22.0: return 539.0 + (minutes - 12.0) * 47.0
-        else:                return 1009.0 + (minutes - 22.0) * 30.0
+        if minutes < 3.0:    return 15.0  + minutes * 6.0
+        elif minutes < 12.0: return 33.0  + (minutes - 3.0)  * 40.0
+        elif minutes < 22.0: return 393.0 + (minutes - 12.0) * 35.0
+        else:                return 743.0 + (minutes - 22.0) * 25.0
     else:
-        if minutes < 3.0:    return  35.0   + minutes * 21.0
-        elif minutes < 12.0: return  98.0   + (minutes - 3.0)  * 155.0
-        elif minutes < 22.0: return 1493.0  + (minutes - 12.0) * 169.0
-        else:                return 2000.0  # cap máximo los últimos 8 min
+        if minutes < 3.0:    return  25.0  + minutes * 16.0
+        elif minutes < 12.0: return  73.0  + (minutes - 3.0)  * 100.0
+        elif minutes < 22.0: return 973.0  + (minutes - 12.0) * 2.7  # se estabiliza cerca de 1000
+        else:                return 1000.0  # cap máximo fijo los últimos minutos
 
 # ════════════════════════════════════════════════════════════════
 #  API PÚBLICA

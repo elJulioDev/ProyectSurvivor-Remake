@@ -5,17 +5,25 @@ signal enemy_killed(pos: Vector2, points: int, type_id: int)
 
 # ════════════════════════════════════════════════════════════════════════════
 #  1. CONSTANTES Y CONFIGURACIÓN
+#  CAMBIOS:
+#    · Velocidad base: 100→65 (estilo Vampire Survivors, más lento)
+#    · small speed_mult: 1.2→1.15 (siguen siendo los más rápidos pero menos)
+#    · Spitter: lógica de IA propia — se queda en radio y dispara
+#    · Exploder: explosión solo daña al jugador, NO a otros enemigos
 # ════════════════════════════════════════════════════════════════════════════
-const MAX_ENEMIES = 3000
+const MAX_ENEMIES = 1200  # buffer interno (el cap real lo controla SpawnManager)
 
 const TYPES = {
-	"small":    { "id": 0, "size_mult": 0.70, "health": 40.0,  "speed_mult": 1.2,  "damage": 6,  "color": Color8(160,240,160), "points": 5 },
-	"normal":   { "id": 1, "size_mult": 0.90,  "health": 90.0,  "speed_mult": 1.0,  "damage": 12, "color": Color8(70,160,70),   "points": 10 },
-	"large":    { "id": 2, "size_mult": 1.1,  "health": 220.0, "speed_mult": 0.72, "damage": 18, "color": Color8(30,100,30),   "points": 20 },
-	"tank":     { "id": 3, "size_mult": 1.3,  "health": 700.0, "speed_mult": 0.38, "damage": 30, "color": Color8(45,65,30),    "points": 60 },
-	"exploder": { "id": 4, "size_mult": 0.95,  "health": 70.0,  "speed_mult": 0.75, "damage": 0,  "color": Color8(255,80,20),   "points": 22 },
-	"spitter":  { "id": 5, "size_mult": 1.0,  "health": 110.0, "speed_mult": 0.75, "damage": 8,  "color": Color8(80,210,50),   "points": 30 },
+	"small":    { "id": 0, "size_mult": 0.70, "health": 40.0,  "speed_mult": 1.15, "damage": 6,  "color": Color8(160,240,160), "points": 5 },
+	"normal":   { "id": 1, "size_mult": 0.90, "health": 90.0,  "speed_mult": 1.0,  "damage": 12, "color": Color8(70,160,70),   "points": 10 },
+	"large":    { "id": 2, "size_mult": 1.1,  "health": 220.0, "speed_mult": 0.70, "damage": 18, "color": Color8(30,100,30),   "points": 20 },
+	"tank":     { "id": 3, "size_mult": 1.3,  "health": 700.0, "speed_mult": 0.35, "damage": 30, "color": Color8(45,65,30),    "points": 60 },
+	"exploder": { "id": 4, "size_mult": 0.95, "health": 70.0,  "speed_mult": 0.80, "damage": 0,  "color": Color8(255,80,20),   "points": 22 },
+	"spitter":  { "id": 5, "size_mult": 1.0,  "health": 110.0, "speed_mult": 0.65, "damage": 8,  "color": Color8(80,210,50),   "points": 30 },
 }
+
+# Velocidad base reducida a 65 (era 100) — movimiento más táctico tipo VS
+const ENEMY_BASE_SPEED : float = 65.0
 
 const GRID_CELL_SIZE = 64.0
 const GRID_WIDTH = 400
@@ -56,30 +64,29 @@ var multimesh_instance: MultiMeshInstance2D
 var multimesh: MultiMesh
 
 # ════════════════════════════════════════════════════════════════════════════
-#  NUEVAS CONSTANTES Y ARRAYS PARA HABILIDADES ESPECIALES
+#  CONSTANTES PARA HABILIDADES ESPECIALES
 # ════════════════════════════════════════════════════════════════════════════
 
-# Exploder
-const EXPLODER_CHARGE_DIST   := 170.0   # px — empieza a cargar
-const EXPLODER_TRIGGER_DIST  :=  85.0   # px — explota
-const EXPLODER_TRIGGER_CHARGE := 0.80   # nivel mínimo de carga para explotar
-const EXPLODER_RADIUS        := 140.0   # radio de la explosión
-const EXPLODER_DAMAGE        :=  65.0   # daño al jugador
-const EXPLODER_ENEMY_DAMAGE  :=  40.0   # daño a enemigos cercanos
-const EXPLODER_CHARGE_RATE   :=   0.035 # por frame @ 60 fps
+# Exploder — solo daña al jugador
+const EXPLODER_CHARGE_DIST   := 170.0
+const EXPLODER_TRIGGER_DIST  :=  85.0
+const EXPLODER_TRIGGER_CHARGE := 0.80
+const EXPLODER_RADIUS        := 140.0
+const EXPLODER_DAMAGE        :=  65.0   # solo al jugador
+const EXPLODER_CHARGE_RATE   :=   0.035
 const EXPLODER_DISCHARGE_RATE :=  0.025
 
-# Spitter
-const SPITTER_PREF_DIST      := 270.0   # distancia preferida del jugador
-const SPITTER_SHOOT_RANGE    := 530.0   # rango máximo de disparo
-const SPITTER_COOLDOWN_BASE  := 360.0   # frames entre disparos (6 s @ 60)
-const SPITTER_COOLDOWN_MIN   :=  90.0   # tras mejoras de velocidad de oleada
+# Spitter — mantiene distancia y dispara (igual que en Pygame)
+const SPITTER_PREF_DIST     := 270.0   # distancia ideal del jugador
+const SPITTER_NEAR_LIMIT    := 162.0   # 60% de pref — si más cerca, huye
+const SPITTER_FAR_LIMIT     := 405.0   # 150% de pref — si más lejos, se acerca
+const SPITTER_SHOOT_RANGE   := 530.0
+const SPITTER_COOLDOWN_BASE := 360.0
+const SPITTER_COOLDOWN_MIN  :=  90.0
 
-# Arrays DOD nuevos
-var charge_levels     := PackedFloat32Array()   # exploders: 0.0–1.0
-var special_cooldowns := PackedFloat32Array()   # spitters: frames restantes
+var charge_levels     := PackedFloat32Array()
+var special_cooldowns := PackedFloat32Array()
 
-# Señales para gameplay.gd
 signal enemy_exploded(pos: Vector2, damage: float, radius: float)
 signal enemy_shot(pos: Vector2, angle: float)
 
@@ -193,7 +200,8 @@ func spawn(pos: Vector2, type_name: String, speed_multiplier: float,
 	knockbacks[idx] = Vector2.ZERO
 	healths[idx]    = h
 	max_healths[idx]= h
-	speeds[idx]     = 100.0 * speed_multiplier * data["speed_mult"] * randf_range(0.9, 1.1)
+	# Velocidad con la nueva base reducida
+	speeds[idx]     = ENEMY_BASE_SPEED * speed_multiplier * data["speed_mult"] * randf_range(0.92, 1.08)
 	sizes[idx]      = 36.0 * data["size_mult"]
 	types[idx]      = data["id"]
 	damages[idx]    = maxi(1, int(data["damage"] * damage_mult))
@@ -261,7 +269,6 @@ func _physics_process(delta: float) -> void:
 	var group_id = WorkerThreadPool.add_group_task(
 		_process_enemy_movement.bind(delta, p_pos, p_vel, _current_batch), active_count)
 	WorkerThreadPool.wait_for_group_task_completion(group_id)
-	# Procesar habilidades especiales (hilo principal — accede a player y señales)
 	_process_specials(p_pos, delta)
 
 	var render_hp_dist_sq : float = 550.0 * 550.0
@@ -273,12 +280,6 @@ func _physics_process(delta: float) -> void:
 	var cam       = viewport.get_camera_2d()
 	var cam_zoom  = cam.zoom if cam else Vector2.ONE
 	var view_size = viewport.get_visible_rect().size / cam_zoom
-
-	# ── FIX CULLING ───────────────────────────────────────────────────────
-	# Usar el centro REAL de la cámara (post-clamp) en lugar de p_pos.
-	# Cuando el jugador está en una esquina, la cámara queda fija y
-	# su centro difiere de la posición del jugador. Sin este fix los
-	# enemigos desaparecen en la mitad de la pantalla visible.
 	var cam_center : Vector2 = cam.get_screen_center_position() if cam else p_pos
 
 	var half_screen_x : float = view_size.x * 0.5 + 300.0
@@ -291,14 +292,12 @@ func _physics_process(delta: float) -> void:
 	for i in range(active_count):
 		var pos = positions[i]
 
-		# Daño al jugador — sigue usando p_pos (distancia real al jugador)
 		var dist_sq  = pos.distance_squared_to(p_pos)
 		var min_dist = (sizes[i] * 0.4) + 12.0
 		if dist_sq < min_dist * min_dist:
 			if player.has_method("take_damage"):
 				player.take_damage(damages[i])
 
-		# Sistema de goteo
 		if bleed_intensities[i] > 0.0:
 			bleed_intensities[i] -= 0.3 * delta * 60.0
 			if bleed_intensities[i] <= 0.0:
@@ -311,7 +310,6 @@ func _physics_process(delta: float) -> void:
 					bleed_cooldowns[i] = maxf(2.0, 20.0 - (bleed_intensities[i] * 0.8))
 					drips_this_frame += 1
 
-		# ── Frustum culling basado en centro de cámara ─────────────────
 		var dist_x = absf(pos.x - cam_center.x)
 		var dist_y = absf(pos.y - cam_center.y)
 
@@ -323,7 +321,6 @@ func _physics_process(delta: float) -> void:
 			var hp_pct  = clampf(healths[i] / max_healths[i], 0.0, 1.0)
 			var show_hp = 1.0 if healths[i] < max_healths[i] \
 				and (dist_x * dist_x + dist_y * dist_y) < render_hp_dist_sq else 0.0
-			# Para exploders: usar hit_flash para mostrar la carga naranja
 			var flash_val : float = hit_flashes[i]
 			if types[i] == 4:
 				flash_val = maxf(flash_val, charge_levels[i] * 0.75)
@@ -347,13 +344,11 @@ func _process_exploder(idx: int, player_pos: Vector2, player) -> void:
 	var pos    : Vector2 = positions[idx]
 	var dist_sq: float   = pos.distance_squared_to(player_pos)
 
-    # Carga cuando está cerca
 	if dist_sq < EXPLODER_CHARGE_DIST * EXPLODER_CHARGE_DIST:
 		charge_levels[idx] = minf(1.0, charge_levels[idx] + EXPLODER_CHARGE_RATE)
 	else:
 		charge_levels[idx] = maxf(0.0, charge_levels[idx] - EXPLODER_DISCHARGE_RATE)
 
-    # Explotar si está suficientemente cargado Y muy cerca
 	if charge_levels[idx] >= EXPLODER_TRIGGER_CHARGE \
 	    and dist_sq < EXPLODER_TRIGGER_DIST * EXPLODER_TRIGGER_DIST:
 		_trigger_explosion(idx, player_pos, player)
@@ -361,46 +356,41 @@ func _process_exploder(idx: int, player_pos: Vector2, player) -> void:
 func _trigger_explosion(idx: int, player_pos: Vector2, player) -> void:
 	var pos := positions[idx]
 
-    # Daño al jugador con falloff
+	# Solo daña al jugador — NO a otros enemigos (comportamiento correcto)
 	var dist_to_player := pos.distance_to(player_pos)
 	if dist_to_player <= EXPLODER_RADIUS and is_instance_valid(player):
 		var falloff := maxf(0.2, 1.0 - (dist_to_player / EXPLODER_RADIUS) * 0.7)
 		if player.has_method("take_damage"):
 			player.take_damage(EXPLODER_DAMAGE * falloff)
 
-    # Daño y knockback a enemigos cercanos (excepto a sí mismo)
-	var nearby := get_enemies_near_proxy(pos, EXPLODER_RADIUS)
-	for eidx in nearby:
-		if eidx == idx: continue
-		var dir := (positions[eidx] - pos)
-		if dir.length_squared() > 0.01: dir = dir.normalized()
-		damage_enemy(eidx, EXPLODER_ENEMY_DAMAGE, dir, 18.0)
-
-    # Señal → gameplay.gd crea el flash de pantalla y partículas
+	# Señal visual → gameplay.gd crea el flash + partículas
 	enemy_exploded.emit(pos, EXPLODER_DAMAGE, EXPLODER_RADIUS)
 
-    # Matar al exploder
+	# Matar al exploder
 	healths[idx] = 0.0
 
 # ─── SPITTER ─────────────────────────────────────────────────────────────
+# El spitter se queda en su radio preferido (270px) y dispara periódicamente,
+# exactamente igual que en el código Python original.
 func _process_spitter(idx: int, player_pos: Vector2, delta: float) -> void:
 	if healths[idx] <= 0.0: return
 
-    # Actualizar cooldown
 	if special_cooldowns[idx] > 0.0:
-		special_cooldowns[idx] -= delta * 60.0  # convertir a frames
+		special_cooldowns[idx] -= delta * 60.0
 		return
-	
+
 	var pos    : Vector2 = positions[idx]
 	var dist_sq: float   = pos.distance_squared_to(player_pos)
-	
+
 	if dist_sq > SPITTER_SHOOT_RANGE * SPITTER_SHOOT_RANGE: return
 
-    # Disparar proyectil ácido
 	var angle := (player_pos - pos).angle()
 	enemy_shot.emit(pos, angle)
 	special_cooldowns[idx] = SPITTER_COOLDOWN_BASE
 
+# ════════════════════════════════════════════════════════════════════════════
+#  MOVIMIENTO POR TIPO — hilo secundario
+# ════════════════════════════════════════════════════════════════════════════
 func _build_grid() -> void:
 	grid_head.fill(-1)
 	grid_next.fill(-1)
@@ -416,6 +406,43 @@ func _process_enemy_movement(i: int, delta: float, p_pos: Vector2,
 	var pos = positions[i]
 	var spd = speeds[i]
 
+	# ── SPITTER: movimiento propio — mantiene distancia y dispara ────────
+	# Igual que en el código Python: si está muy cerca huye, si está en rango
+	# se queda quieto, si está lejos se acerca.
+	if types[i] == 5:
+		var dx : float = pos.x - p_pos.x
+		var dy : float = pos.y - p_pos.y
+		var dist_sq : float = dx * dx + dy * dy
+		var dist : float = sqrt(dist_sq) if dist_sq > 0.0001 else 0.001
+		var inv_d : float = 1.0 / dist
+
+		if dist < SPITTER_NEAR_LIMIT:
+			# Muy cerca — alejarse del jugador
+			var flee_speed : float = spd * 0.9
+			var target_vx : float = (dx * inv_d) * flee_speed
+			var target_vy : float = (dy * inv_d) * flee_speed
+			velocities[i] = velocities[i].lerp(Vector2(target_vx, target_vy), 0.25)
+		elif dist > SPITTER_FAR_LIMIT:
+			# Muy lejos — acercarse lentamente
+			var target_vx : float = (-dx * inv_d) * spd
+			var target_vy : float = (-dy * inv_d) * spd
+			velocities[i] = velocities[i].lerp(Vector2(target_vx, target_vy), 0.20)
+		else:
+			# En rango preferido — frenarse gradualmente
+			velocities[i] = velocities[i].lerp(Vector2.ZERO, 0.15)
+
+		# Aplicar knockback y física básica
+		if knockbacks[i].length_squared() > 0.01:
+			knockbacks[i] *= pow(0.88, delta * 60.0)
+			if knockbacks[i].length() < 0.1:
+				knockbacks[i] = Vector2.ZERO
+		positions[i] += (velocities[i] + knockbacks[i]) * delta
+
+		if hit_flashes[i] > 0.0:
+			hit_flashes[i] = maxf(0.0, hit_flashes[i] - delta * 6.0)
+		return
+
+	# ── RESTO DE ENEMIGOS: movimiento estándar hacia el jugador ──────────
 	if i % BATCH_COUNT == current_batch:
 		var p_vel_frame = p_vel / 60.0
 		var raw_dist    = pos.distance_to(p_pos)
@@ -424,6 +451,7 @@ func _process_enemy_movement(i: int, delta: float, p_pos: Vector2,
 		var dir         = pos.direction_to(target_pos)
 		if dir == Vector2.ZERO: dir = Vector2.RIGHT
 
+		# Separación entre enemigos (anti-clustering)
 		var push_x     = 0.0
 		var push_y     = 0.0
 		var sep_radius = sizes[i] * 0.4 * 4.0
@@ -465,14 +493,15 @@ func _process_enemy_movement(i: int, delta: float, p_pos: Vector2,
 			push_x *= inv_pm
 			push_y *= inv_pm
 
+		# Movimiento lateral por carril (evita que todos vayan en línea recta)
 		var perp        = Vector2(-dir.y, dir.x)
-		var lat_strength = 0.38 * spd
+		var lat_strength = 0.35 * spd
 		var lane_vel    = perp * lanes[i] * lat_strength
 
 		var target_vx = dir.x * spd + push_x + lane_vel.x
 		var target_vy = dir.y * spd + push_y + lane_vel.y
 
-		var lerp_f = 0.40
+		var lerp_f = 0.35  # ligeramente más suave que antes (era 0.40)
 		var cv     = velocities[i]
 		velocities[i] = Vector2(
 			cv.x * (1.0 - lerp_f) + target_vx * lerp_f,
