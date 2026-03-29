@@ -2,6 +2,7 @@
 
 [ext_resource type="Script" uid="uid://lbco4d7tvpgt" path="res://scenes/gameplay.gd" id="1_6p5th"]
 [ext_resource type="Script" uid="uid://cudqalr7suo7i" path="res://core/world/background_layer.gd" id="2_rokjk"]
+[ext_resource type="Script" uid="uid://1inuaf6yhij6" path="res://core/managers/blood_system.gd.gd" id="4_qixtg"]
 [ext_resource type="PackedScene" uid="uid://j1e488b6hoow" path="res://entities/player/player.tscn" id="5_876sc"]
 [ext_resource type="Script" uid="uid://cbf04560fyyou" path="res://core/utils/camera.gd" id="6_jv18n"]
 [ext_resource type="Script" uid="uid://bvc8wnm4tbetm" path="res://ui/hud/hud.gd" id="7_h725n"]
@@ -18,7 +19,11 @@ script = ExtResource("1_6p5th")
 [node name="World" type="Node2D" parent="." unique_id=1752792137]
 
 [node name="BackgroundLayer" type="Node2D" parent="World" unique_id=883696639]
+z_index = -20
 script = ExtResource("2_rokjk")
+
+[node name="BloodSystem" type="Node2D" parent="World" unique_id=1939371203]
+script = ExtResource("4_qixtg")
 
 [node name="Player" parent="World" unique_id=1871687937 instance=ExtResource("5_876sc")]
 
