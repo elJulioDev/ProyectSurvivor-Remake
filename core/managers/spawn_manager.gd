@@ -129,6 +129,9 @@ const TYPE_ID_TO_NAME : Dictionary = {
 @export var is_mobile : bool = false
 
 var curse_factor     : float = 1.0
+var health_curse     : float = 1.0
+var speed_curse      : float = 1.0
+var elite_curse      : float = 1.0
 var game_time        : float = 0.0
 var difficulty_level : float = 1.0
 
@@ -173,6 +176,19 @@ func update_spawner(delta: float, current_enemy_count: int,
             _enemy_manager.teleport_distant(player_pos, _player_vel)
 
     var minutes     := game_time / 60.0
+    # Leer curse del player
+    var player_node := get_tree().get_first_node_in_group("player")
+    var spawn_curse := 1.0
+    health_curse = 1.0
+    speed_curse = 1.0
+    elite_curse = 1.0
+    if is_instance_valid(player_node):
+        spawn_curse  = player_node.get("curse_spawn_mult") if "curse_spawn_mult" in player_node else 1.0
+        health_curse = player_node.get("curse_health_mult") if "curse_health_mult" in player_node else 1.0
+        speed_curse  = player_node.get("curse_speed_mult") if "curse_speed_mult" in player_node else 1.0
+        elite_curse  = player_node.get("curse_elite_mult") if "curse_elite_mult" in player_node else 1.0
+        
+    curse_factor = spawn_curse * elite_curse   # ← ya existía como var de instancia
     var current_cap := mini(int(_calc_base_cap(minutes) * curse_factor), HARD_CAP)
     var quotas      := _get_interpolated_quotas(minutes)
 
@@ -208,6 +224,33 @@ func update_spawner(delta: float, current_enemy_count: int,
         _do_spawn(entry["type"], entry["level"])
         spawned += 1
 
+# En la función update_spawner(), reemplazar la línea:
+#   var current_cap := mini(int(_calc_base_cap(minutes) * curse_factor), HARD_CAP)
+# Por:
+#
+#   # Leer curse del player
+#   var player_node := get_tree().get_first_node_in_group("player")
+#   var spawn_curse := 1.0
+#   var health_curse := 1.0
+#   var speed_curse := 1.0
+#   var elite_curse := 1.0
+#   if is_instance_valid(player_node):
+#       spawn_curse  = player_node.get("curse_spawn_mult") if "curse_spawn_mult" in player_node else 1.0
+#       health_curse = player_node.get("curse_health_mult") if "curse_health_mult" in player_node else 1.0
+#       speed_curse  = player_node.get("curse_speed_mult") if "curse_speed_mult" in player_node else 1.0
+#       elite_curse  = player_node.get("curse_elite_mult") if "curse_elite_mult" in player_node else 1.0
+#
+#   curse_factor = spawn_curse * elite_curse   # ← ya existía como var de instancia
+#   var current_cap := mini(int(_calc_base_cap(minutes) * curse_factor), HARD_CAP)
+ 
+# En la función _do_spawn(), aplicar curse a health y speed:
+#
+#   # DESPUÉS de calcular speed_mult y health_mult:
+#   speed_mult  *= speed_curse * elite_curse
+#   health_mult *= health_curse * elite_curse
+ 
+# --- FIN PARCHE spawn_manager.gd ---
+
 # ════════════════════════════════════════════════════════════════
 #  SPAWN INDIVIDUAL
 # ════════════════════════════════════════════════════════════════
@@ -223,7 +266,8 @@ func _do_spawn(type_name: String, player_level: int) -> void:
     var level_factor     : int   = maxi(0, player_level - 1)
     var health_mult      : float = minf(10.0, time_health_mult * (1.0 + float(level_factor) * 0.05))
     var damage_mult      : float = 1.0 + float(level_factor) * 0.04
-
+    speed_mult  *= speed_curse * elite_curse
+    health_mult *= health_curse * elite_curse
     var pos := _get_spawn_position()
     _enemy_manager.spawn(pos, type_name, speed_mult, health_mult, damage_mult)
 

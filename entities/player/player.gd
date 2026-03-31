@@ -50,6 +50,17 @@ var magnet_range_mult: float = 1.0
 var magnet_speed_mult: float = 1.0
 var xp_on_kill_bonus : int   = 0
 
+# ── Pasivos (sistema v2) ──────────────────────────────────────────
+var gem_xp_mult          : float = 1.0   # Multiplicador XP de gemas (Paga Doble)
+var extra_gem_chance_bonus : float = 0.0 # Bonus prob. gemas extra por kill
+
+# ── Maldiciones (Curse System) ────────────────────────────────────
+var curse_spawn_mult     : float = 1.0   # Mult. tasa de spawn
+var curse_health_mult    : float = 1.0   # Mult. HP enemigos
+var curse_speed_mult     : float = 1.0   # Mult. velocidad enemigos
+var curse_elite_mult     : float = 1.0   # Mult. global de dificultad
+ 
+
 # ── Aura de Espinas ───────────────────────────────────────────────
 var aura_damage      : float = 0.0
 var aura_radius      : float = 80.0
