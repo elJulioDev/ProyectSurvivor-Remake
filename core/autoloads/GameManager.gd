@@ -29,6 +29,22 @@ var projectile_manager : Node = null   # ProjectileManager DOD
 signal scene_change_requested(scene_path: String, data: Dictionary)
 var current_scene_node: Node = null
 
+## Personaje seleccionado antes de entrar a gameplay.
+## Se asigna en character_select.gd y se lee en player.gd._ready()
+var selected_character : CharacterData = null
+
+## Carga un personaje por su ID desde la carpeta estándar.
+## Útil para fallback si character_select no fue visitado.
+func get_or_default_character() -> CharacterData:
+	if is_instance_valid(selected_character):
+		return selected_character
+	# Fallback: carga el Soldado por defecto para no romper el flujo
+	var fallback_path := "res://entities/characters/Soldier.tres"
+	if ResourceLoader.exists(fallback_path):
+		return load(fallback_path) as CharacterData
+	push_error("GameManager: No hay personaje seleccionado y no existe Soldier.tres")
+	return null
+
 func goto_scene(path: String, data: Dictionary = {}) -> void:
 	scene_change_requested.emit(path, data)
 

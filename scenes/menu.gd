@@ -193,7 +193,8 @@ func _unhandled_input(event: InputEvent) -> void:
 				get_tree().quit()
 
 func _go_play() -> void:
-	GameManager.goto_scene("res://scenes/gameplay.tscn", {})
+	GameManager.goto_scene("res://scenes/character_select.tscn")
+
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #  DIBUJO PRINCIPAL

@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="CharacterData" format=3 uid="uid://bokryby4oifpq"]
+
+[ext_resource type="Script" uid="uid://cxaou6igm3aab" path="res://entities/characters/character_data.gd" id="1_7sjtl"]
+
+[resource]
+script = ExtResource("1_7sjtl")
+character_id = "elPepe"
+character_name = "elPepe"
+description = "el ql mas choro"
+color = Color(0.9095321, 0.6910187, 0.2027326, 1)
+base_hp = 900.0
+base_speed = 300.0
+xp_mult = 5.0
+starting_weapons = Array[String](["Sniper"])
+available_weapons = Array[String](["Sniper"])
+metadata/_custom_type_script = "uid://cxaou6igm3aab"

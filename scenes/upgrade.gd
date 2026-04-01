@@ -186,25 +186,47 @@ func _select_upgrades() -> Array:
 	if not is_instance_valid(_player):
 		return []
 
+	# ── Cache del pool de armas del personaje actual ──────────────
+	# Si no hay character_data (ej: primera versión sin selección),
+	# se permite todo para no romper partidas en curso.
+	var char_weapon_pool : Array[String] = []
+	var has_char_filter  : bool = false
+	if is_instance_valid(_player.character_data):
+		char_weapon_pool = _player.character_data.available_weapons
+		has_char_filter  = true
+
 	var available_keys    : Array = []
 	var available_weights : Array = []
 
 	for key in UpgradesData.UPGRADES:
 		var upg : Dictionary = UpgradesData.UPGRADES[key]
 
-		# Filtrar por requisito
 		if not _check_requires(upg.get("requires", null)):
 			continue
 
-		# Desbloqueos únicos
-		if upg["type"] == "unlock" and key == "dash":
-			if _player.dash_unlocked:
+		# ── Filtro de desbloqueo de arma ──────────────────────────
+		if upg["type"] == "unlock_weapon":
+			var weapon_class := upg["weapon_class"] as String
+			# Ya la tiene equipada
+			if weapon_class in _player.unlocked_weapon_names:
 				continue
-		elif upg["type"] == "unlock_weapon":
-			if (upg["weapon_class"] as String) in _player.unlocked_weapon_names:
+			# NUEVO: ¿está en el pool de este personaje?
+			if has_char_filter and weapon_class not in char_weapon_pool:
 				continue
 
-		# Límite de stacks
+		# ── Filtro de mejora de arma específica ───────────────────
+		elif upg["type"] == "weapon_specific":
+			var weapon_target := upg.get("weapon_target", "") as String
+			# NUEVO: si el personaje no puede tener esta arma, ocultar su mejora
+			if has_char_filter and weapon_target not in char_weapon_pool:
+				continue
+
+		# ── Desbloqueos únicos (dash, etc.) ───────────────────────
+		elif upg["type"] == "unlock" and key == "dash":
+			if _player.dash_unlocked:
+				continue
+
+		# ── Límite de stacks (sin cambios) ────────────────────────
 		var max_stacks = upg.get("max_stacks", null)
 		if max_stacks != null:
 			if _player.upgrade_counts.get(key, 0) >= max_stacks:

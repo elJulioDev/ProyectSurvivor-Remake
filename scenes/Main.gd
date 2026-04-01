@@ -14,9 +14,11 @@ extends Node
 
 @onready var scene_container: Node = $SceneContainer
 
-## Escenas que requieren pantalla de carga previa.
+# Cambio 1: añadir character_select al array de escenas con carga pesada
+# (opcional, la escena es ligera):
 const LOADING_REQUIRED : PackedStringArray = [
 	"res://scenes/gameplay.tscn",
+	# "res://scenes/character_select.tscn",  # solo si es pesada
 ]
 
 var _current_scene : Node = null

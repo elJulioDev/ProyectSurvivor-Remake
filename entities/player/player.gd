@@ -59,7 +59,6 @@ var curse_spawn_mult     : float = 1.0   # Mult. tasa de spawn
 var curse_health_mult    : float = 1.0   # Mult. HP enemigos
 var curse_speed_mult     : float = 1.0   # Mult. velocidad enemigos
 var curse_elite_mult     : float = 1.0   # Mult. global de dificultad
- 
 
 # ── Aura de Espinas ───────────────────────────────────────────────
 var aura_damage      : float = 0.0
@@ -101,6 +100,8 @@ var _damage_flash_timer : float = 0.0
 var _aura_pulse_timer : float = 0.0
 var _aura_vis_timer   : float = 0.0
 
+var character_data : CharacterData = null
+
 # ── Sistema de Armas ──────────────────────────────────────────────
 var weapons : Array :
 	get:
@@ -120,12 +121,63 @@ var current_weapon_index  : int = 0
 
 func _ready() -> void:
 	add_to_group("player")
-	add_weapon("Pistol")
-	add_weapon("AssaultRifle")
-	add_weapon("Shotgun")
-	add_weapon("Laser")
-	add_weapon("Sniper")
-	add_weapon("Skibidi")
+	_apply_character_data()
+
+# ════════════════════════════════════════════════════════════════════
+#  SISTEMA DE PERSONAJE
+# ════════════════════════════════════════════════════════════════════
+
+func _apply_character_data() -> void:
+	character_data = GameManager.get_or_default_character()
+	if not character_data:
+		# Sin datos de personaje: carga la pistola por defecto y sale
+		add_weapon("Pistol")
+		return
+
+	# ── Aplicar stats base ────────────────────────────────────────
+	# Estos son los multiplicadores del personaje, ANTES de upgrades.
+	# Los upgrades (global_damage_mult, etc.) se aplican SOBRE estos.
+	max_health         = character_data.base_hp * character_data.hp_mult
+	health             = max_health
+	# Velocidad base: el player usa max_speed internamente
+	# (ajusta al nombre exacto de tu variable de velocidad)
+	# Si usas una constante, aquí la pisas con el valor del personaje:
+	# max_speed = character_data.base_speed * character_data.speed_mult
+
+	# Multiplicadores iniciales del personaje se suman a los del jugador
+	global_damage_mult   *= character_data.damage_mult
+	global_cooldown_mult *= character_data.cooldown_mult
+	xp_mult              *= character_data.xp_mult
+
+	# ── Cargar armas de inicio ────────────────────────────────────
+	for weapon_name in character_data.starting_weapons:
+		add_weapon(weapon_name)  # usa tu función existente
+
+	# ── Aplicar pasiva del personaje ──────────────────────────────
+	_apply_character_passive(character_data.passive_id, character_data.passive_value)
+
+	print("[Player] Personaje cargado: %s | Armas: %s" % [
+		character_data.character_name,
+		character_data.starting_weapons
+	])
+
+
+func _apply_character_passive(passive_id: String, value: float) -> void:
+	## Aquí se activan las pasivas únicas de cada personaje.
+	## Añade un match nuevo por cada personaje que implementes.
+	match passive_id:
+		"health_regen":
+			# El Médico regenera HP constantemente
+			health_regen += value
+		"double_tap":
+			# El Pistolero tiene chance de disparar doble (implementar en WeaponController)
+			# Por ahora, guardamos el valor en una variable del player
+			# que WeaponController puede leer
+			set_meta("double_tap_chance", value)
+		"":
+			pass  # Sin pasiva
+		_:
+			push_warning("_apply_character_passive: pasiva desconocida '%s'" % passive_id)
 
 func _physics_process(delta: float) -> void:
 	if not is_alive:
