@@ -47,10 +47,15 @@ func _load_all_characters() -> void:
 	dir.list_dir_begin()
 	var fname := dir.get_next()
 	while fname != "":
-		if fname.ends_with(".tres"):
-			var res = load(CHARACTERS_DIR + fname)
+		# Limpiamos el sufijo ".remap" que Godot añade al exportar
+		var clean_name = fname.trim_suffix(".remap")
+		
+		# Ahora verificamos sobre el nombre limpio
+		if clean_name.ends_with(".tres"):
+			var res = load(CHARACTERS_DIR + clean_name)
 			if res is CharacterData:
 				_characters.append(res)
+				
 		fname = dir.get_next()
 	dir.list_dir_end()
 
@@ -80,15 +85,27 @@ func _process(delta: float) -> void:
 	queue_redraw()
 
 # ── Input ─────────────────────────────────────────────────────────
-
 func _unhandled_input(event: InputEvent) -> void:
 	if _input_cd > 0.0 or _characters.is_empty():
 		return
 
-	if event is InputEventMouseButton and event.pressed:
-		if event.button_index == MOUSE_BUTTON_LEFT and _hovered_idx >= 0:
-			_confirm(_hovered_idx)
+	# --- NUEVO: Soporte directo para Toques en pantallas táctiles (Android) ---
+	if event is InputEventScreenTouch and event.pressed:
+		for i in range(_characters.size()):
+			if _get_card_rect(i).has_point(event.position):
+				_confirm(i)
+				return
 
+	# Soporte para clics de mouse en PC
+	elif event is InputEventMouseButton and event.pressed:
+		if event.button_index == MOUSE_BUTTON_LEFT:
+			# En lugar de usar _hovered_idx, comprobamos la posición exacta del clic
+			for i in range(_characters.size()):
+				if _get_card_rect(i).has_point(event.position):
+					_confirm(i)
+					return
+
+	# Soporte para teclado
 	elif event is InputEventKey and event.pressed and not event.echo:
 		match event.keycode:
 			KEY_LEFT, KEY_A:

@@ -19,6 +19,8 @@ var game_time: float = 0.0
 
 var player_ref: Node2D = null
 
+var mobile_controls: Control = null
+
 ## True mientras hay una pantalla de upgrade visible
 var _upgrade_active: bool = false
 
@@ -141,6 +143,10 @@ func _show_upgrade_screen() -> void:
 	_upgrade_active   = true
 	get_tree().paused = true
 
+	# --- NUEVO: Ocultamos los joysticks y cancelamos el movimiento actual
+	if is_instance_valid(mobile_controls):
+		mobile_controls.hide_and_release()
+
 	var upgrade_packed := load("res://scenes/upgrade.tscn") as PackedScene
 	if not upgrade_packed:
 		push_error("gameplay.gd: no se encontró res://scenes/upgrade.tscn")
@@ -164,6 +170,10 @@ func _show_upgrade_screen() -> void:
 			else:
 				get_tree().paused = false
 				Input.set_mouse_mode(Input.MOUSE_MODE_HIDDEN)
+				
+				# --- NUEVO: Volvemos a mostrar los joysticks al reanudar
+				if is_instance_valid(mobile_controls):
+					mobile_controls.visible = true
 	)
 
 # ════════════════════════════════════════════════════════════════
@@ -194,26 +204,42 @@ func _format_time(seconds: float) -> String:
 	var s: int = floori(fmod(seconds, 60.0))
 	return "%02d:%02d" % [m, s]
 
-func setup(_data: Dictionary) -> void:
-	pass
+func setup(data: Dictionary) -> void:
+	var is_mobile: bool = data.get("is_mobile", false)
+	
+	if is_mobile:
+		# Obtenemos el recurso de la caché de hilos. Dado que lo pedimos
+		# en loading.gd, el coste es O(1) y no bloquea el hilo principal.
+		var mc_path := "res://ui/hud/mobile_controls.tscn"
+		var mc_packed : PackedScene = ResourceLoader.load_threaded_get(mc_path) as PackedScene
+		
+		# Fallback por seguridad en caso de que la caché haya limpiado el recurso
+		if not is_instance_valid(mc_packed):
+			mc_packed = load(mc_path) as PackedScene
+			
+		if is_instance_valid(mc_packed):
+			mobile_controls = mc_packed.instantiate()
+			# Se añade como hijo directo del gameplay (o idealmente 
+			# a un CanvasLayer dedicado para UI como HUD)
+			add_child(mobile_controls)
 
 # ════════════════════════════════════════════════════════════════
 #  CALLBACKS DE HABILIDADES ESPECIALES
 # ════════════════════════════════════════════════════════════════
 
 func _on_enemy_exploded(pos: Vector2, damage: float, radius: float) -> void:
-    # Sacudida de cámara proporcional al daño
+	# Sacudida de cámara proporcional al daño
 	if camera.has_method("add_shake"):
 		camera.add_shake(clampf(damage * 0.18, 4.0, 14.0))
 
-    # Flash naranja de explosión (sistema de partículas / efecto visual)
+	# Flash naranja de explosión (sistema de partículas / efecto visual)
 	var particles := get_tree().get_first_node_in_group("blood_particles")
 	if is_instance_valid(particles):
-        # Usar viscera_explosion si existe, o añadir un método de explosión
+		# Usar viscera_explosion si existe, o añadir un método de explosión
 		if particles.has_method("create_viscera_explosion"):
 			particles.create_viscera_explosion(pos, radius / 40.0)
 
 func _on_enemy_shot(pos: Vector2, angle: float) -> void:
-    # Delegar al EnemyProjectileManager
+	# Delegar al EnemyProjectileManager
 	if is_instance_valid(enemy_proj_manager):
 		enemy_proj_manager.spawn(pos, angle)

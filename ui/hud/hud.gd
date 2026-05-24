@@ -42,6 +42,11 @@ const C_SCORE      := Color(1.000, 0.863, 0.235, 1.0)
 const C_TIME       := Color(0.784, 0.824, 0.902, 1.0)
 const C_ENEMIES    := Color(0.863, 0.314, 0.235, 1.0)
 
+# Nuevas variables de tamaño para móviles (más fáciles de presionar)
+const WEP_SLOT_W : float = 80.0
+const WEP_SLOT_H : float = 75.0
+const WEP_GAP    : float = 12.0
+
 # Datos públicos actualizados por gameplay.gd cada frame
 var score          : int    = 0
 var enemies_killed : int    = 0
@@ -62,7 +67,7 @@ var _font            : Font
 
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	mouse_filter = Control.MOUSE_FILTER_PASS
 	_font = ThemeDB.fallback_font
 	_try_find_player()
 
@@ -260,39 +265,31 @@ func _draw_weapon_indicator() -> void:
 	if not ("weapons" in p) or p.weapons == null or p.weapons.size() == 0:
 		return
 
-	const SLOT_W : float = 54.0
-	const SLOT_H : float = 50.0
-	const GAP    : float = 6.0
-
 	var n       : int   = p.weapons.size()
-	var total_w : float = n * SLOT_W + (n - 1) * GAP
+	var total_w : float = n * WEP_SLOT_W + (n - 1) * WEP_GAP
 	var sx0     : float = size.x * 0.5 - total_w * 0.5
-	var by      : float = size.y - SLOT_H - 18.0
+	var by      : float = size.y - WEP_SLOT_H - 18.0
 	var cur     : int   = int(p.current_weapon_index) if "current_weapon_index" in p else 0
 
-	# ── Fondo único para toda la tira (2 draw calls) ──────────────
-	draw_rect(Rect2(sx0 - 6, by - 4, total_w + 12, SLOT_H + 8), C_BG_PANEL)
-	draw_rect(Rect2(sx0 - 6, by - 4, total_w + 12, SLOT_H + 8), C_BORDER, false, 1.0)
+	# Fondo único para toda la tira
+	draw_rect(Rect2(sx0 - 6, by - 4, total_w + 12, WEP_SLOT_H + 8), C_BG_PANEL)
+	draw_rect(Rect2(sx0 - 6, by - 4, total_w + 12, WEP_SLOT_H + 8), C_BORDER, false, 1.0)
 
 	for i in range(n):
-		var sx     : float = sx0 + i * (SLOT_W + GAP)
+		var sx     : float = sx0 + i * (WEP_SLOT_W + WEP_GAP)
 		var weapon         = p.weapons[i]
 		var active : bool  = (i == cur)
 
-		# Resaltar slot activo (2 draw calls solo para el arma activa)
 		if active:
-			draw_rect(Rect2(sx, by, SLOT_W, SLOT_H), Color(0.06, 0.16, 0.30, 0.85))
-			draw_rect(Rect2(sx, by, SLOT_W, SLOT_H), C_DASH_READY, false, 2.0)
+			draw_rect(Rect2(sx, by, WEP_SLOT_W, WEP_SLOT_H), Color(0.06, 0.16, 0.30, 0.85))
+			draw_rect(Rect2(sx, by, WEP_SLOT_W, WEP_SLOT_H), C_DASH_READY, false, 2.0)
 
-		# ── Número de tecla ───────────────────────────────────────
-		_text(str(i + 1), Vector2(sx + 5.0, by + 4.0),
-			  FS_TINY, C_WHITE if active else C_DIM)
+		_text(str(i + 1), Vector2(sx + 5.0, by + 4.0), FS_TINY, C_WHITE if active else C_DIM)
 
-		# ── Nombre del arma (truncado a 6 chars) ──────────────────
 		var wn : String = (weapon.weapon_name as String) if "weapon_name" in weapon else "?"
 		if wn.length() > 6:
 			wn = wn.substr(0, 6)
-		_text_center(wn, Vector2(sx + SLOT_W * 0.5, by + SLOT_H * 0.5 + 4.0),
+		_text_center(wn, Vector2(sx + WEP_SLOT_W * 0.5, by + WEP_SLOT_H * 0.5 + 4.0),
 					 FS_TINY, C_WHITE if active else C_DIM)
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -332,3 +329,40 @@ func _fmt_score(s: int) -> String:
 		if count > 0 and count % 3 == 0: result = "." + result
 		result = str(n % 10) + result; n /= 10; count += 1
 	return result
+
+func _gui_input(event: InputEvent) -> void:
+	if not is_instance_valid(_player) or not ("weapons" in _player):
+		return
+		
+	# RESTRICCIÓN: Solo procesar toques en pantalla si estamos en un dispositivo móvil
+	if OS.get_name() in ["Android", "iOS"]:
+		# Detectar toques en pantalla (o clicks de ratón simulados en móvil)
+		if (event is InputEventScreenTouch or event is InputEventMouseButton) and event.is_pressed():
+			var n : int = _player.weapons.size()
+			if n == 0: return
+
+			var total_w : float = n * WEP_SLOT_W + (n - 1) * WEP_GAP
+			var sx0     : float = size.x * 0.5 - total_w * 0.5
+			var by      : float = size.y - WEP_SLOT_H - 18.0
+
+			var ev_pos : Vector2 = event.position
+			
+			# Verificamos si tocamos dentro de los cuadrados de armas
+			for i in range(n):
+				var sx : float = sx0 + i * (WEP_SLOT_W + WEP_GAP)
+				var rect := Rect2(sx, by, WEP_SLOT_W, WEP_SLOT_H)
+				
+				if rect.has_point(ev_pos):
+					# Simular como si el jugador hubiese presionado la tecla "1", "2", "3", etc.
+					var key_ev := InputEventKey.new()
+					key_ev.keycode = (KEY_1 + i) as Key
+					key_ev.pressed = true
+					Input.parse_input_event(key_ev)
+					
+					# Liberar tecla virtual
+					var key_release = key_ev.duplicate()
+					key_release.pressed = false
+					Input.parse_input_event(key_release)
+					
+					get_viewport().set_input_as_handled() # Consumir el evento
+					return

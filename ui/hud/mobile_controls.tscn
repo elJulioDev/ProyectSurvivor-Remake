@@ -1,0 +1,69 @@
+[gd_scene format=3 uid="uid://b8emnwrial5p"]
+
+[ext_resource type="Script" uid="uid://b5djra71hbdur" path="res://addons/virtual_joystick_plus/virtual_joystick_plus.gd" id="1_7vkj0"]
+[ext_resource type="Script" uid="uid://bf766uw1v7wo6" path="res://ui/hud/mobile_controls.gd" id="1_8ea2h"]
+[ext_resource type="Texture2D" uid="uid://dq6v5wfxv7uqo" path="res://addons/virtual_joystick_plus/resources/textures/joystick_texture_5.png" id="2_8ea2h"]
+[ext_resource type="Texture2D" uid="uid://dai4rtwqalygn" path="res://addons/virtual_joystick_plus/resources/textures/stick_texture_5.png" id="3_7d0mf"]
+[ext_resource type="Texture2D" uid="uid://be76pt2hytq3q" path="res://icon.svg" id="4_k3jjs"]
+
+[sub_resource type="CompressedTexture2D" id="CompressedTexture2D_253gy"]
+load_path = "res://.godot/imported/icon.svg-218a8f2b3041327d8a5756f3a245f83b.ctex"
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_uo4js"]
+
+[node name="MobileControls" type="CanvasLayer" unique_id=977031588]
+layer = 5
+
+[node name="Control" type="Control" parent="." unique_id=866927840]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_8ea2h")
+
+[node name="MoveJoystick" type="Control" parent="Control" unique_id=1471941112]
+custom_minimum_size = Vector2(300, 300)
+layout_mode = 1
+anchors_preset = 2
+anchor_top = 1.0
+anchor_bottom = 1.0
+offset_top = -300.0
+offset_right = 300.0
+grow_vertical = 0
+pivot_offset = Vector2(150, 150)
+script = ExtResource("1_7vkj0")
+joystick_mode = 1
+relative_position = Vector2(0.5, 0.7)
+joystick_texture = ExtResource("2_8ea2h")
+stick_texture = ExtResource("3_7d0mf")
+metadata/_custom_type_script = "uid://b5djra71hbdur"
+
+[node name="AimJoystick" type="Control" parent="Control" unique_id=1530994426]
+custom_minimum_size = Vector2(300, 300)
+layout_mode = 1
+anchors_preset = 3
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -300.0
+offset_top = -300.0
+grow_horizontal = 0
+grow_vertical = 0
+pivot_offset = Vector2(150, 150)
+script = ExtResource("1_7vkj0")
+joystick_mode = 1
+relative_position = Vector2(0.5, 0.7)
+joystick_texture = ExtResource("2_8ea2h")
+stick_texture = ExtResource("3_7d0mf")
+metadata/_custom_type_script = "uid://b5djra71hbdur"
+
+[node name="DashButton" type="TouchScreenButton" parent="Control" unique_id=1286798351]
+visible = false
+position = Vector2(1108, 252)
+texture_normal = ExtResource("4_k3jjs")
+texture_pressed = SubResource("CompressedTexture2D_253gy")
+shape = SubResource("RectangleShape2D_uo4js")
+action = "dash"

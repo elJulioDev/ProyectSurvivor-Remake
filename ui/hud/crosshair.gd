@@ -24,11 +24,25 @@ func _ready() -> void:
 	set_anchors_preset(PRESET_FULL_RECT)
 
 func _process(delta: float) -> void:
-	# Seguir la posición del ratón en la pantalla
-	global_position = get_viewport().get_mouse_position()
+	if not is_instance_valid(player):
+		return
+
+	# --- MODIFICACIÓN: Lógica de Posicionamiento ---
+	if OS.get_name() in ["Android", "iOS"]:
+	# if true:
+		# En móvil: Fija la mira a un radio de distancia según hacia dónde apunta (aim_angle)
+		var aim_radius := 100.0 # Distancia de la mira. Puedes ajustar este número a tu gusto.
+		var aim_dir := Vector2(cos(player.aim_angle), sin(player.aim_angle))
+		
+		# Obtenemos la posición del jugador traducida a coordenadas de pantalla (UI)
+		var player_screen_pos = player.get_global_transform_with_canvas().origin
+		global_position = player_screen_pos + (aim_dir * aim_radius)
+	else:
+		# En escritorio: Seguir la posición del ratón de forma libre
+		global_position = get_viewport().get_mouse_position()
 
 	# CAMBIO 1: Usamos player.weapons en lugar de player.active_weapons
-	if is_instance_valid(player) and player.weapons.size() > 0:
+	if player.weapons.size() > 0:
 		var current_weapon = player.weapons[player.current_weapon_index]
 		
 		# Leer el tipo de mira del arma actual

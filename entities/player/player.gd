@@ -193,8 +193,11 @@ func _physics_process(delta: float) -> void:
 	_clamp_to_world()
 	move_and_slide()
 
-	if Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
-		attack()
+	# MODIFICACIÓN: Solo usamos el ratón para disparar si no estamos en móvil.
+	# En móvil, el disparo lo gestiona exclusivamente el mobile_controls.gd (Joystick derecho).
+	if OS.get_name() not in ["Android", "iOS"]:
+		if Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
+			attack()
 
 	_aura_vis_timer += delta
 	queue_redraw()
@@ -202,7 +205,11 @@ func _physics_process(delta: float) -> void:
 # ── Apuntado ──────────────────────────────────────────────────────
 
 func _update_aim() -> void:
-	aim_angle = (get_global_mouse_position() - global_position).angle()
+    # En escritorio: apuntar con mouse
+    # En móvil: aim_angle lo setea mobile_controls.gd directamente
+	if OS.get_name() not in ["Android", "iOS"]:
+		aim_angle = (get_global_mouse_position() - global_position).angle()
+		
 	if is_instance_valid(_weapon_pivot):
 		_weapon_pivot.rotation = aim_angle
 
@@ -424,11 +431,15 @@ func add_weapon(weapon_file_name: String) -> void:
 		return
 
 	var path := "res://entities/weapons/%s.tres" % weapon_file_name
-	if not ResourceLoader.exists(path):
+	
+	# Intentamos cargar el recurso directamente. 
+	# load() encontrará el .remap automáticamente en el juego exportado.
+	var weapon_res: WeaponData = load(path) as WeaponData
+	
+	# Verificamos si la carga fue exitosa en lugar de usar ResourceLoader.exists
+	if not weapon_res:
 		push_warning("add_weapon: no se encontró recurso en %s" % path)
 		return
-
-	var weapon_res: WeaponData = load(path)
 
 	if _weapon_controller:
 		_weapon_controller.add_weapon(weapon_res)
