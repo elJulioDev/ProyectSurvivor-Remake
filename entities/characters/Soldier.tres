@@ -5,4 +5,5 @@
 [resource]
 script = ExtResource("1_n2paq")
 color = Color(1, 1, 1, 1)
+starting_weapons = Array[String](["Pistol", "Shotgun"])
 metadata/_custom_type_script = "uid://cxaou6igm3aab"

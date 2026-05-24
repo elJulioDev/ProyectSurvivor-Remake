@@ -27,3 +27,46 @@ func play(sound_name: String, volume_db: float = -14.0) -> void:
 	player.volume_db = volume_db
 	player.play()
 	player.finished.connect(player.queue_free)
+
+func play_weapon_sound(weapon: WeaponData) -> void:
+	if not weapon.fire_sound:
+		return
+
+	var player = AudioStreamPlayer.new()
+	add_child(player)
+
+	# Configuración inicial del sonido principal
+	player.stream = weapon.fire_sound
+	player.volume_db = weapon.fire_sound_volume
+	# Variación aleatoria de pitch para mayor realismo (ej. que las metralletas no suenen robóticas)
+	player.pitch_scale = weapon.fire_sound_pitch + randf_range(-weapon.fire_sound_pitch_rand, weapon.fire_sound_pitch_rand)
+
+	# Lógica del retraso (delay)
+	if weapon.fire_sound_delay > 0.0:
+		await get_tree().create_timer(weapon.fire_sound_delay).timeout
+		# Validamos si el nodo aún existe por si se cerró la escena durante el delay
+		if not is_instance_valid(player): 
+			return
+
+	player.play()
+
+	# Usamos un Callable (lambda) para manejar qué ocurre cuando termina el sonido
+	var on_finished_callable = Callable()
+	on_finished_callable = func():
+		if weapon.fire_sound_loop:
+			player.play() # Volver a reproducir
+		elif weapon.fire_sound_tail:
+			# Cambiar al sonido secundario (cola) y reproducir
+			player.stream = weapon.fire_sound_tail
+			player.play()
+			
+			# Desconectamos esta lambda para que no haga loop del tail
+			player.finished.disconnect(on_finished_callable)
+			# Conectamos para que libere memoria cuando termine el tail
+			player.finished.connect(player.queue_free)
+		else:
+			# Si no hay loop ni cola, borramos el nodo
+			player.queue_free()
+
+	# Conectamos la señal de término del AudioStreamPlayer a nuestra lógica
+	player.finished.connect(on_finished_callable)

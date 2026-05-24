@@ -121,6 +121,7 @@ func attempt_shoot(weapon_index: int) -> bool:
 # ════════════════════════════════════════════════════════════════════
 
 func _fire_one_shot(weapon: WeaponData) -> void:
+	AudioManager.play_weapon_sound(weapon)
 	match weapon.fire_pattern:
 		WeaponData.FirePattern.SINGLE:
 			_fire_pellets(weapon, player.aim_angle, Vector2.ZERO)

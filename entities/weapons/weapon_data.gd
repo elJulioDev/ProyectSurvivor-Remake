@@ -58,6 +58,27 @@ enum FirePattern { SINGLE, RADIAL, SPIRAL, ALTERNATING }
 @export var laser_thickness : float = 10.0
 
 # ════════════════════════════════════════════════════════════════════
+#  AUDIO Y EFECTOS SONOROS
+# ════════════════════════════════════════════════════════════════════
+
+@export_group("Audio y Efectos Sonoros")
+
+## Sonido principal al disparar el arma.
+@export var fire_sound : AudioStream
+## Volumen del disparo en decibelios (dB). 0 es el máximo sin distorsionar.
+@export var fire_sound_volume : float = -14.0
+## Tono base del disparo. 1.0 es velocidad normal. Menos es más grave, más es más agudo.
+@export var fire_sound_pitch : float = 1.0
+## Variación aleatoria del tono para que no suene repetitivo (ej: 0.1 variará el tono un ±10%).
+@export var fire_sound_pitch_rand : float = 0.1
+## Retraso en segundos antes de que suene el disparo.
+@export var fire_sound_delay : float = 0.0
+## Si es verdadero, el sonido principal se repetirá en bucle.
+@export var fire_sound_loop : bool = false
+## Sonido secundario que se reproducirá automáticamente al terminar el sonido principal.
+@export var fire_sound_tail : AudioStream
+
+# ════════════════════════════════════════════════════════════════════
 #  PATRÓN DE DISPARO
 # ════════════════════════════════════════════════════════════════════
 
