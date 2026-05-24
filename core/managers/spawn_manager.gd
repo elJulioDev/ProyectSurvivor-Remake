@@ -139,7 +139,7 @@ var _spawn_queue    : Array = []
 var _type_cooldowns : Dictionary = {}
 var _player_pos     : Vector2 = Vector2.ZERO
 var _player_vel     : Vector2 = Vector2.ZERO
-var _teleport_timer : float   = 0.0
+var _pressure_timer : float = 0.0
 var _enemy_manager  : Node    = null
 
 # ════════════════════════════════════════════════════════════════
@@ -169,29 +169,21 @@ func update_spawner(delta: float, current_enemy_count: int,
 
     difficulty_level = 1.0 + (game_time / 60.0) * 0.15
 
-    _teleport_timer += delta
-    if _teleport_timer >= TELEPORT_INTERVAL:
-        _teleport_timer = 0.0
-        if is_instance_valid(_enemy_manager):
-            _enemy_manager.teleport_distant(player_pos, _player_vel)
-
-    var minutes     := game_time / 60.0
-    # Leer curse del player
-    var player_node := get_tree().get_first_node_in_group("player")
+    # Leer curses
     var spawn_curse := 1.0
-    health_curse = 1.0
-    speed_curse = 1.0
-    elite_curse = 1.0
-    if is_instance_valid(player_node):
-        spawn_curse  = player_node.get("curse_spawn_mult") if "curse_spawn_mult" in player_node else 1.0
-        health_curse = player_node.get("curse_health_mult") if "curse_health_mult" in player_node else 1.0
-        speed_curse  = player_node.get("curse_speed_mult") if "curse_speed_mult" in player_node else 1.0
-        elite_curse  = player_node.get("curse_elite_mult") if "curse_elite_mult" in player_node else 1.0
-        
-    curse_factor = spawn_curse * elite_curse   # ← ya existía como var de instancia
+    health_curse = 1.0; speed_curse = 1.0; elite_curse = 1.0
+    if is_instance_valid(player):
+        spawn_curse  = player.get("curse_spawn_mult") if "curse_spawn_mult" in player else 1.0
+        health_curse = player.get("curse_health_mult") if "curse_health_mult" in player else 1.0
+        speed_curse  = player.get("curse_speed_mult") if "curse_speed_mult" in player else 1.0
+        elite_curse  = player.get("curse_elite_mult") if "curse_elite_mult" in player else 1.0
+
+    curse_factor = spawn_curse * elite_curse
+    var minutes     := game_time / 60.0
     var current_cap := mini(int(_calc_base_cap(minutes) * curse_factor), HARD_CAP)
     var quotas      := _get_interpolated_quotas(minutes)
 
+    # Cooldowns normales
     for key in _type_cooldowns:
         _type_cooldowns[key] = maxf(0.0, _type_cooldowns[key] - delta)
 
@@ -199,6 +191,7 @@ func update_spawner(delta: float, current_enemy_count: int,
     if is_instance_valid(_enemy_manager):
         active_counts = _enemy_manager.get_all_type_counts()
 
+    # ── Cola normal (sin cambios) ────────────────────────────────
     if current_enemy_count < current_cap:
         var remaining_capacity := current_cap - current_enemy_count
         for type_name in quotas:
@@ -216,6 +209,7 @@ func update_spawner(delta: float, current_enemy_count: int,
                 remaining_capacity -= 1
             _type_cooldowns[type_name] = interval
 
+    # Spawn de cola limitado
     var spawned := 0
     while _spawn_queue.size() > 0 \
             and spawned < SPAWNS_PER_FRAME \
@@ -224,36 +218,87 @@ func update_spawner(delta: float, current_enemy_count: int,
         _do_spawn(entry["type"], entry["level"])
         spawned += 1
 
-# En la función update_spawner(), reemplazar la línea:
-#   var current_cap := mini(int(_calc_base_cap(minutes) * curse_factor), HARD_CAP)
-# Por:
-#
-#   # Leer curse del player
-#   var player_node := get_tree().get_first_node_in_group("player")
-#   var spawn_curse := 1.0
-#   var health_curse := 1.0
-#   var speed_curse := 1.0
-#   var elite_curse := 1.0
-#   if is_instance_valid(player_node):
-#       spawn_curse  = player_node.get("curse_spawn_mult") if "curse_spawn_mult" in player_node else 1.0
-#       health_curse = player_node.get("curse_health_mult") if "curse_health_mult" in player_node else 1.0
-#       speed_curse  = player_node.get("curse_speed_mult") if "curse_speed_mult" in player_node else 1.0
-#       elite_curse  = player_node.get("curse_elite_mult") if "curse_elite_mult" in player_node else 1.0
-#
-#   curse_factor = spawn_curse * elite_curse   # ← ya existía como var de instancia
-#   var current_cap := mini(int(_calc_base_cap(minutes) * curse_factor), HARD_CAP)
- 
-# En la función _do_spawn(), aplicar curse a health y speed:
-#
-#   # DESPUÉS de calcular speed_mult y health_mult:
-#   speed_mult  *= speed_curse * elite_curse
-#   health_mult *= health_curse * elite_curse
- 
-# --- FIN PARCHE spawn_manager.gd ---
+    # ── Presión direccional: spawn inmediato cuando el jugador huye ──
+    # Si el jugador se mueve rápido, spawnea pequeños/normales
+    # directamente delante para que no tenga ruta de escape libre.
+    _pressure_timer += delta
+    var player_speed_sq := _player_vel.length_squared()
+    # Threshold: ~60% de la velocidad max del jugador (~210px/s → 126px/s)
+    var speed_threshold : float = 126.0 * 126.0
+
+    if player_speed_sq > speed_threshold and current_enemy_count < current_cap:
+        # Intervalo de presión: cada 1.2s base, se reduce con dificultad
+        var pressure_interval := maxf(0.5, 1.2 - (minutes * 0.015))
+        if _pressure_timer >= pressure_interval:
+            _pressure_timer = 0.0
+            # Spawn 1-2 enemigos ligeros directamente en la dirección de fuga
+            var n_pressure := 2 if minutes > 5.0 else 1
+            for _k in range(n_pressure):
+                var ptype := "small" if randf() < 0.6 else "normal"
+                _do_spawn_directed(ptype, player_level, _player_vel.normalized())
+    else:
+        _pressure_timer = minf(_pressure_timer, 0.0)
+
 
 # ════════════════════════════════════════════════════════════════
 #  SPAWN INDIVIDUAL
 # ════════════════════════════════════════════════════════════════
+
+func _do_spawn_directed(type_name: String, player_level: int, direction: Vector2) -> void:
+    ## Spawn justo fuera del borde de pantalla en la dirección dada.
+    ## Garantiza presión constante cuando el jugador huye.
+    if not is_instance_valid(_enemy_manager):
+        return
+
+    var viewport  : Viewport = get_viewport()
+    var cam       : Camera2D = viewport.get_camera_2d()
+    var spawn_center : Vector2
+    var half_x : float
+    var half_y : float
+
+    if is_instance_valid(cam):
+        var zoom    : Vector2 = cam.zoom
+        var vp_size : Vector2 = viewport.get_visible_rect().size
+        half_x = (vp_size.x / zoom.x) * 0.5 + VIEWPORT_MARGIN
+        half_y = (vp_size.y / zoom.y) * 0.5 + VIEWPORT_MARGIN
+        spawn_center = cam.get_screen_center_position()
+    else:
+        var r := randf_range(FALLBACK_RADIUS_MIN, FALLBACK_RADIUS_MAX)
+        var a := direction.angle() + randf_range(-0.3, 0.3)
+        _enemy_manager.spawn(
+            _clamp_to_world(_player_pos + Vector2(cos(a), sin(a)) * r),
+            type_name,
+            minf(2.2, 1.0 + difficulty_level * 0.09) * speed_curse * elite_curse,
+            minf(5.5, 1.0 + (difficulty_level - 1.0) * 0.32) * health_curse * elite_curse,
+            1.0 + float(maxi(0, player_level - 1)) * 0.04
+        )
+        return
+
+    # Elegir lado de spawn basado en la dirección de movimiento del jugador
+    var dir_norm := direction if direction.length_squared() > 0.01 else Vector2.RIGHT
+    var side     := _fwd_side(dir_norm)
+
+    # Concentrar el 80% en el lado adelante, con algo de variación lateral
+    var roll := randf()
+    if roll > 0.80:
+        side = (side + (1 if randf() < 0.5 else 3)) % 4
+
+    var pos : Vector2
+    match side:
+        0: pos = Vector2(spawn_center.x + randf_range(-half_x * 0.7, half_x * 0.7),
+                         spawn_center.y - half_y)
+        1: pos = Vector2(spawn_center.x + half_x,
+                         spawn_center.y + randf_range(-half_y * 0.7, half_y * 0.7))
+        2: pos = Vector2(spawn_center.x + randf_range(-half_x * 0.7, half_x * 0.7),
+                         spawn_center.y + half_y)
+        _: pos = Vector2(spawn_center.x - half_x,
+                         spawn_center.y + randf_range(-half_y * 0.7, half_y * 0.7))
+
+    var speed_mult  : float = minf(2.2, 1.0 + difficulty_level * 0.09) * speed_curse * elite_curse
+    var health_mult : float = minf(5.5, 1.0 + (difficulty_level - 1.0) * 0.32) * health_curse * elite_curse
+    var damage_mult : float = 1.0 + float(maxi(0, player_level - 1)) * 0.04
+
+    _enemy_manager.spawn(_clamp_to_world(pos), type_name, speed_mult, health_mult, damage_mult)
 
 func _do_spawn(type_name: String, player_level: int) -> void:
     if not is_instance_valid(_enemy_manager):

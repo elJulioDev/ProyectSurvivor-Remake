@@ -214,32 +214,43 @@ func spawn(pos: Vector2, type_name: String, speed_multiplier: float,
 	special_cooldowns[idx] = randf_range(0.0, SPITTER_COOLDOWN_BASE * 0.5)
 	active_count += 1
 
-func teleport_distant(player_pos: Vector2, player_vel: Vector2 = Vector2.ZERO) -> void:
-	const MAX_DIST_SQ      : float = 1900.0 * 1900.0
-	const SPAWN_R_MIN      : float = 1300.0
-	const SPAWN_R_MAX      : float = 1600.0
-	const VEL_THRESHOLD_SQ : float = 400.0
+func teleport_distant(player_pos: Vector2, player_vel: Vector2 = Vector2.ZERO, viewport_half: Vector2 = Vector2(700.0, 420.0)) -> void:
+    # Usa el tamaño real del viewport + margen de seguridad
+    # para definir cuándo un enemigo está "fuera de pantalla"
+	var off_x : float = viewport_half.x + 80.0
+	var off_y : float = viewport_half.y + 80.0
 
-	var moving  : bool  = player_vel.length_squared() > VEL_THRESHOLD_SQ
+    # Un enemigo está fuera si supera estas distancias desde el jugador
+	var moving  : bool  = player_vel.length_squared() > 400.0
 	var fwd_ang : float = player_vel.angle() if moving else 0.0
 
+    # Radio de spawn: justo fuera del borde de pantalla
+	var spawn_r_min : float = maxf(viewport_half.x, viewport_half.y) + 60.0
+	var spawn_r_max : float = spawn_r_min + 200.0
+	
 	for i in range(active_count):
-		if positions[i].distance_squared_to(player_pos) <= MAX_DIST_SQ:
-			continue
+		var pos := positions[i]
+		var dx := absf(pos.x - player_pos.x)
+		var dy := absf(pos.y - player_pos.y)
 
+        # Solo teleportar si está fuera del viewport
+		if dx <= off_x and dy <= off_y:
+			continue
+			
 		var angle : float
 		if moving:
 			var roll := randf()
-			if roll < 0.60:
-				angle = fwd_ang + randf_range(-PI * 0.45, PI * 0.45)
+			if roll < 0.55:
+                # Mayoría aparece adelante del jugador
+				angle = fwd_ang + randf_range(-PI * 0.40, PI * 0.40)
 			elif roll < 0.80:
-				angle = fwd_ang + randf_range(PI * 0.45, PI * 0.90)
+				angle = fwd_ang + randf_range(PI * 0.40, PI * 0.85)
 			else:
-				angle = fwd_ang + randf_range(-PI * 0.90, -PI * 0.45)
+				angle = fwd_ang + randf_range(-PI * 0.85, -PI * 0.40)
 		else:
 			angle = randf() * TAU
-
-		var radius : float = randf_range(SPAWN_R_MIN, SPAWN_R_MAX)
+			
+		var radius : float = randf_range(spawn_r_min, spawn_r_max)
 		positions[i]  = player_pos + Vector2(cos(angle), sin(angle)) * radius
 		velocities[i] = Vector2.ZERO
 		knockbacks[i] = Vector2.ZERO
@@ -248,20 +259,106 @@ func teleport_distant(player_pos: Vector2, player_vel: Vector2 = Vector2.ZERO) -
 # ════════════════════════════════════════════════════════════════════════════
 #  5. LÓGICA DE MOVIMIENTO MULTI-HILO
 # ════════════════════════════════════════════════════════════════════════════
+
+# ── Agregá esta función nueva ─────────────────────────────────────
+func _redistribute_stragglers(player_pos: Vector2, player_vel: Vector2, viewport_half: Vector2) -> void:
+    ## Detecta enemigos acumulados en la zona trasera del jugador
+    ## y los teletransporta al frente, igual que VS.
+    ## Solo corre cuando el jugador se mueve y hay cap lleno.
+	
+	var moving : bool = player_vel.length_squared() > 200.0
+	if not moving:
+		return
+		
+	var fwd     : Vector2 = player_vel.normalized()
+	var fwd_ang : float   = fwd.angle()
+
+    # Zona "trasera": enemigos en el semiplano opuesto al movimiento
+    # a más de 60px del jugador pero dentro del viewport
+	var behind_threshold_sq : float = 60.0 * 60.0
+
+    # Zona "frente": borde del viewport en dirección de movimiento
+	var spawn_r_min : float = maxf(viewport_half.x, viewport_half.y) * 0.85
+	var spawn_r_max : float = spawn_r_min + 180.0
+
+    # Cuántos redistribuir por llamada — evita spike de CPU
+    # y da sensación gradual (no teleport masivo instantáneo)
+	var max_redistribute : int = 4
+	var redistributed    : int = 0
+	
+	for i in range(active_count):
+		if redistributed >= max_redistribute:
+			break
+			
+		var pos    : Vector2 = positions[i]
+		var to_p   : Vector2 = pos - player_pos
+		var dist_sq: float   = to_p.length_squared()
+
+        # Ignorar si está demasiado cerca del jugador
+		if dist_sq < behind_threshold_sq:
+			continue
+
+        # Calcular si está "atrás": dot product negativo con dirección de movimiento
+		var dot : float = to_p.dot(fwd)
+		if dot >= 0.0:
+            # Está adelante o al lado — no redistribuir
+			continue
+
+        # Está atrás. Verificar que NO esté visible en pantalla
+        # (solo redistribuir enemigos fuera del viewport)
+		var dx_screen : float = absf(pos.x - player_pos.x)
+		var dy_screen : float = absf(pos.y - player_pos.y)
+		if dx_screen <= viewport_half.x + 20.0 and dy_screen <= viewport_half.y + 20.0:
+			continue
+
+        # Reubicar al frente con variación angular
+		var spread_angle : float = randf_range(-PI * 0.45, PI * 0.45)
+		var new_angle    : float = fwd_ang + spread_angle
+		var radius       : float = randf_range(spawn_r_min, spawn_r_max)
+		var new_pos      : Vector2 = player_pos + Vector2(cos(new_angle), sin(new_angle)) * radius
+		
+		positions[i]  = _clamp_pos(new_pos)
+		velocities[i] = Vector2.ZERO
+		knockbacks[i] = Vector2.ZERO
+		hit_flashes[i]= 0.0
+		redistributed += 1
+
+func _clamp_pos(pos: Vector2) -> Vector2:
+	const MARGIN : float = 50.0
+	return Vector2(
+		clampf(pos.x, -MARGIN, 12000.0 + MARGIN),
+		clampf(pos.y, -MARGIN, 9000.0  + MARGIN)
+	)
+
 func _physics_process(delta: float) -> void:
 	_cleanup_dead_enemies()
 	if active_count == 0:
 		multimesh.visible_instance_count = 0
 		return
-
+		
 	var player = get_tree().get_first_node_in_group("player")
 	if not player: return
-
+	
 	var p_pos = player.global_position
 	var p_vel = player.velocity if "velocity" in player else Vector2.ZERO
 
+    # Calcular viewport_half UNA vez por frame — se usa en teleport y redistribuye
+	var cam       := get_viewport().get_camera_2d()
+	var cam_zoom  := cam.zoom if cam else Vector2.ONE
+	var vp_size   := get_viewport().get_visible_rect().size
+	var vp_half   : Vector2 = vp_size * 0.5 / cam_zoom
+
+    # Teleport de enemigos MUY lejanos — cada 30 frames
 	if Engine.get_process_frames() % 30 == 0:
-		teleport_distant(p_pos, p_vel)
+		teleport_distant(p_pos, p_vel, vp_half)
+
+    # Redistribución de rezagados — cada 20 frames cuando hay presión de cap
+    # (más frecuente que el teleport para respuesta rápida)
+	if Engine.get_process_frames() % 20 == 0:
+		var cap_ratio : float = float(active_count) / float(MAX_ENEMIES)
+		# Solo redistribuir si estamos al 60%+ del cap — ahí es cuando duele
+		if cap_ratio >= 0.60:
+			_redistribute_stragglers(p_pos, p_vel, vp_half)
 
 	_build_grid()
 
@@ -275,10 +372,10 @@ func _physics_process(delta: float) -> void:
 
 	if not is_instance_valid(_particle_sys):
 		_particle_sys = get_tree().get_first_node_in_group("blood_particles")
-
+		
 	var viewport  = get_viewport()
-	var cam       = viewport.get_camera_2d()
-	var cam_zoom  = cam.zoom if cam else Vector2.ONE
+	cam = viewport.get_camera_2d()
+	cam_zoom = cam.zoom if cam else Vector2.ONE
 	var view_size = viewport.get_visible_rect().size / cam_zoom
 	var cam_center : Vector2 = cam.get_screen_center_position() if cam else p_pos
 
@@ -401,72 +498,73 @@ func _build_grid() -> void:
 		grid_next[i]      = grid_head[cell_idx]
 		grid_head[cell_idx] = i
 
-func _process_enemy_movement(i: int, delta: float, p_pos: Vector2,
-							  p_vel: Vector2, current_batch: int) -> void:
+func _process_enemy_movement(i: int, delta: float, p_pos: Vector2, p_vel: Vector2, current_batch: int) -> void:
 	var pos = positions[i]
 	var spd = speeds[i]
 
-	# ── SPITTER: movimiento propio — mantiene distancia y dispara ────────
-	# Igual que en el código Python: si está muy cerca huye, si está en rango
-	# se queda quieto, si está lejos se acerca.
+    # ── SPITTER ──────────────────────────────────────────────────
 	if types[i] == 5:
 		var dx : float = pos.x - p_pos.x
 		var dy : float = pos.y - p_pos.y
 		var dist_sq : float = dx * dx + dy * dy
 		var dist : float = sqrt(dist_sq) if dist_sq > 0.0001 else 0.001
 		var inv_d : float = 1.0 / dist
-
+		
 		if dist < SPITTER_NEAR_LIMIT:
-			# Muy cerca — alejarse del jugador
 			var flee_speed : float = spd * 0.9
-			var target_vx : float = (dx * inv_d) * flee_speed
-			var target_vy : float = (dy * inv_d) * flee_speed
-			velocities[i] = velocities[i].lerp(Vector2(target_vx, target_vy), 0.25)
+			velocities[i] = velocities[i].lerp(
+				Vector2((dx * inv_d) * flee_speed, (dy * inv_d) * flee_speed), 0.25)
 		elif dist > SPITTER_FAR_LIMIT:
-			# Muy lejos — acercarse lentamente
-			var target_vx : float = (-dx * inv_d) * spd
-			var target_vy : float = (-dy * inv_d) * spd
-			velocities[i] = velocities[i].lerp(Vector2(target_vx, target_vy), 0.20)
+			velocities[i] = velocities[i].lerp(
+				Vector2((-dx * inv_d) * spd, (-dy * inv_d) * spd), 0.20)
 		else:
-			# En rango preferido — frenarse gradualmente
 			velocities[i] = velocities[i].lerp(Vector2.ZERO, 0.15)
-
-		# Aplicar knockback y física básica
+			
 		if knockbacks[i].length_squared() > 0.01:
 			knockbacks[i] *= pow(0.88, delta * 60.0)
 			if knockbacks[i].length() < 0.1:
-				knockbacks[i] = Vector2.ZERO
+				knockbacks[i] = Vector2.ZERO		
 		positions[i] += (velocities[i] + knockbacks[i]) * delta
-
 		if hit_flashes[i] > 0.0:
 			hit_flashes[i] = maxf(0.0, hit_flashes[i] - delta * 6.0)
 		return
 
-	# ── RESTO DE ENEMIGOS: movimiento estándar hacia el jugador ──────────
+    # ── RESTO DE ENEMIGOS ────────────────────────────────────────
 	if i % BATCH_COUNT == current_batch:
+        # ── Target disperso: cada enemigo apunta a un punto
+        #    en un anillo alrededor del jugador según su lane.
+        #    Radio del anillo = 0.8 × su propio tamaño.
+        #    Esto evita que todos converjan al mismo píxel.
+		var lane_val  : float = lanes[i]
+		var ring_r    : float = sizes[i] * 0.8
+		var ring_angle: float = lane_val * TAU       # único por enemy
+		var ring_off  : Vector2 = Vector2(cos(ring_angle), sin(ring_angle)) * ring_r
+		var spread_target : Vector2 = p_pos + ring_off
+
+        # Predicción de movimiento (suavizada)
 		var p_vel_frame = p_vel / 60.0
-		var raw_dist    = pos.distance_to(p_pos)
-		var predict_t   = minf(18.0, raw_dist / maxf(1.0, spd * 2.5))
-		var target_pos  = p_pos + p_vel_frame * (predict_t * 0.55)
+		var raw_dist    = pos.distance_to(spread_target)
+		var predict_t   = minf(12.0, raw_dist / maxf(1.0, spd * 2.5))
+		var target_pos  = spread_target + p_vel_frame * (predict_t * 0.4)
 		var dir         = pos.direction_to(target_pos)
 		if dir == Vector2.ZERO: dir = Vector2.RIGHT
 
-		# Separación entre enemigos (anti-clustering)
-		var push_x     = 0.0
-		var push_y     = 0.0
-		var sep_radius = sizes[i] * 0.4 * 4.0
+        # ── Separación anti-clustering ───────────────────────────
+		var push_x   = 0.0
+		var push_y   = 0.0
+		var sep_radius = sizes[i] * 0.5 * 6.0
 		var cr_sq      = sep_radius * sep_radius
 		var count      = 0
-
+		
 		var cx = clampi(int((pos.x + GRID_OFFSET) / GRID_CELL_SIZE), 0, GRID_WIDTH - 1)
-		var cy = clampi(int((pos.y + GRID_OFFSET) / GRID_CELL_SIZE), 0, GRID_HEIGHT - 1)
-
+		var cy_grid = clampi(int((pos.y + GRID_OFFSET) / GRID_CELL_SIZE), 0, GRID_HEIGHT - 1)
+		
 		for dy in range(-1, 2):
 			for dx in range(-1, 2):
 				var nx = clampi(cx + dx, 0, GRID_WIDTH - 1)
-				var ny = clampi(cy + dy, 0, GRID_HEIGHT - 1)
+				var ny = clampi(cy_grid + dy, 0, GRID_HEIGHT - 1)
 				var enemy_idx = grid_head[nx + ny * GRID_WIDTH]
-				while enemy_idx != -1 and count < 4:
+				while enemy_idx != -1 and count < 8:
 					if enemy_idx != i:
 						var other_pos = positions[enemy_idx]
 						var odx       = pos.x - other_pos.x
@@ -475,44 +573,45 @@ func _process_enemy_movement(i: int, delta: float, p_pos: Vector2,
 						if odist_sq > 0.0001 and odist_sq < cr_sq:
 							var odist  = sqrt(odist_sq)
 							var overlap = sep_radius - odist
-							var ps      = overlap * (overlap / sep_radius) * 0.18
+                            # Fuerza cuadrática: empuje fuerte cerca, suave lejos
+							var ps = overlap * (overlap / sep_radius) * 0.40
 							push_x += (odx / odist) * ps
 							push_y += (ody / odist) * ps
 							count  += 1
 					enemy_idx = grid_next[enemy_idx]
-
+					
 		if count > 1:
 			var inv_sqrt = 1.0 / sqrt(float(count))
 			push_x *= inv_sqrt
 			push_y *= inv_sqrt
-
+		
 		var push_sq  = push_x * push_x + push_y * push_y
-		var max_push = spd * 1.2
+		var max_push = spd * 2.0
 		if push_sq > max_push * max_push:
 			var inv_pm = max_push / sqrt(push_sq)
 			push_x *= inv_pm
 			push_y *= inv_pm
 
-		# Movimiento lateral por carril (evita que todos vayan en línea recta)
-		var perp        = Vector2(-dir.y, dir.x)
+        # ── Movimiento lateral por carril ────────────────────────
+		var perp         = Vector2(-dir.y, dir.x)
 		var lat_strength = 0.35 * spd
-		var lane_vel    = perp * lanes[i] * lat_strength
-
+		var lane_vel     = perp * lane_val * lat_strength
+		
 		var target_vx = dir.x * spd + push_x + lane_vel.x
 		var target_vy = dir.y * spd + push_y + lane_vel.y
-
-		var lerp_f = 0.35  # ligeramente más suave que antes (era 0.40)
+		
+		var lerp_f = 0.35
 		var cv     = velocities[i]
 		velocities[i] = Vector2(
 			cv.x * (1.0 - lerp_f) + target_vx * lerp_f,
 			cv.y * (1.0 - lerp_f) + target_vy * lerp_f)
-
+			
 	if knockbacks[i].length_squared() > 0.01:
 		knockbacks[i] *= pow(0.88, delta * 60.0)
 		if knockbacks[i].length() < 0.1: knockbacks[i] = Vector2.ZERO
-
+		
 	positions[i] += (velocities[i] + knockbacks[i]) * delta
-
+	
 	if hit_flashes[i] > 0.0:
 		hit_flashes[i] = maxf(0.0, hit_flashes[i] - delta * 6.0)
 
