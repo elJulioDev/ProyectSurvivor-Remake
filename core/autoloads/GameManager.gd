@@ -70,3 +70,13 @@ func get_nearest_enemy_pos(pos: Vector2, max_r: float = 900.0) -> Vector2:
 		if idx >= 0:
 			return enemy_manager.get_pos(idx)
 	return Vector2.ZERO
+
+# --- MODO DEBUG MÓVIL ---
+# Cambia esto a "true" para probar la interfaz de Android/iOS en PC.
+var force_mobile_mode: bool = false 
+
+func is_mobile() -> bool:
+	if force_mobile_mode:
+		return true
+	# OS.has_feature("mobile") es la forma oficial y más robusta en Godot 4 para exportaciones
+	return OS.get_name() in ["Android", "iOS"] or OS.has_feature("mobile")

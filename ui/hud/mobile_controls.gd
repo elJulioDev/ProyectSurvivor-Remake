@@ -1,9 +1,9 @@
-extends Control
+extends CanvasLayer
 
 # Referencias
-@onready var move_joystick : VirtualJoystickPlus = $MoveJoystick
-@onready var aim_joystick  : VirtualJoystickPlus = $AimJoystick
-@onready var dash_button   : TouchScreenButton   = $DashButton
+@onready var move_joystick : VirtualJoystickPlus = $Control/MoveJoystick
+@onready var aim_joystick  : VirtualJoystickPlus = $Control/AimJoystick
+@onready var dash_button   : TouchScreenButton   = $Control/DashButton
 
 var _player : Node = null
 var _aim_vec : Vector2 = Vector2.ZERO
@@ -11,7 +11,7 @@ var _shooting : bool = false
 
 func _ready() -> void:
 	# Solo mostrar en móvil
-	if not _is_mobile():
+	if not GameManager.is_mobile():
 		queue_free()
 		return
 
@@ -114,8 +114,11 @@ func _is_mobile() -> bool:
 	return OS.get_name() in ["Android", "iOS"]
 	# return true
 
+func show_controls() -> void:
+	$Control.visible = true
+
 func hide_and_release() -> void:
-	visible = false
+	$Control.visible = false
 	_release_action("move_right")
 	_release_action("move_left")
 	_release_action("move_up")

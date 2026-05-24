@@ -334,8 +334,8 @@ func _gui_input(event: InputEvent) -> void:
 	if not is_instance_valid(_player) or not ("weapons" in _player):
 		return
 		
-	# RESTRICCIÓN: Solo procesar toques en pantalla si estamos en un dispositivo móvil
-	if OS.get_name() in ["Android", "iOS"]:
+	# RESTRICCIÓN: Ahora usa el GameManager para saber si habilitar toques
+	if GameManager.is_mobile():
 		# Detectar toques en pantalla (o clicks de ratón simulados en móvil)
 		if (event is InputEventScreenTouch or event is InputEventMouseButton) and event.is_pressed():
 			var n : int = _player.weapons.size()
@@ -353,11 +353,14 @@ func _gui_input(event: InputEvent) -> void:
 				var rect := Rect2(sx, by, WEP_SLOT_W, WEP_SLOT_H)
 				
 				if rect.has_point(ev_pos):
-					# Simular como si el jugador hubiese presionado la tecla "1", "2", "3", etc.
+					# Simular como si el jugador hubiese presionado la tecla
 					var key_ev := InputEventKey.new()
 					key_ev.keycode = (KEY_1 + i) as Key
 					key_ev.pressed = true
 					Input.parse_input_event(key_ev)
+					
+					# --- NUEVO: Esperar un frame para que el jugador logre registrar la tecla ---
+					await get_tree().process_frame
 					
 					# Liberar tecla virtual
 					var key_release = key_ev.duplicate()

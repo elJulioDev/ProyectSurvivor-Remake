@@ -57,15 +57,14 @@ func setup(data: Dictionary) -> void:
 	_target_scene = data.get("target", "res://scenes/gameplay.tscn")
 	_target_data  = data.get("data",   {})
 	
-	# 1. Verificamos si estamos en dispositivo móvil desde la carga
-	var is_mobile: bool = OS.get_name() in ["Android", "iOS"] or OS.has_feature("mobile")
+	# 1. Usar el GameManager (Centralizado) para saber si es móvil o si forzamos debug
+	var is_mobile: bool = GameManager.is_mobile()
 	_target_data["is_mobile"] = is_mobile
 	
 	# 2. Hilo principal de carga para el Gameplay
 	ResourceLoader.load_threaded_request(_target_scene)
 	
-	# 3. Optimización: Precargamos la escena de controles móviles en 
-	# segundo plano si es necesario para evitar tirones de instanciación
+	# 3. Optimización: Precargamos la escena de controles móviles
 	if is_mobile:
 		ResourceLoader.load_threaded_request("res://ui/hud/mobile_controls.tscn")
 

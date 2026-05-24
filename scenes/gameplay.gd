@@ -19,7 +19,7 @@ var game_time: float = 0.0
 
 var player_ref: Node2D = null
 
-var mobile_controls: Control = null
+var mobile_controls: CanvasLayer = null
 
 ## True mientras hay una pantalla de upgrade visible
 var _upgrade_active: bool = false
@@ -65,6 +65,9 @@ func _ready() -> void:
 			camera.snap_to_player()
 
 		camera.make_current()
+
+	# Invocamos el setup usando la función global (muy útil si inicias con F6)
+	setup({"is_mobile": GameManager.is_mobile()})
 
 func _setup_camera() -> void:
 	camera.limit_left   = 0
@@ -173,7 +176,7 @@ func _show_upgrade_screen() -> void:
 				
 				# --- NUEVO: Volvemos a mostrar los joysticks al reanudar
 				if is_instance_valid(mobile_controls):
-					mobile_controls.visible = true
+					mobile_controls.show_controls()
 	)
 
 # ════════════════════════════════════════════════════════════════
@@ -205,23 +208,28 @@ func _format_time(seconds: float) -> String:
 	return "%02d:%02d" % [m, s]
 
 func setup(data: Dictionary) -> void:
+
+	if is_instance_valid(mobile_controls):
+		return
+	
 	var is_mobile: bool = data.get("is_mobile", false)
 	
 	if is_mobile:
-		# Obtenemos el recurso de la caché de hilos. Dado que lo pedimos
-		# en loading.gd, el coste es O(1) y no bloquea el hilo principal.
 		var mc_path := "res://ui/hud/mobile_controls.tscn"
-		var mc_packed : PackedScene = ResourceLoader.load_threaded_get(mc_path) as PackedScene
+		var mc_packed : PackedScene
 		
-		# Fallback por seguridad en caso de que la caché haya limpiado el recurso
-		if not is_instance_valid(mc_packed):
+		# Intentar consumir el recurso precargado por loading.gd para máxima velocidad
+		if ResourceLoader.has_cached(mc_path):
+			mc_packed = ResourceLoader.load_threaded_get(mc_path) as PackedScene
+		else:
+			# Fallback normal (por si ejecutas gameplay.tscn directamente con F6)
 			mc_packed = load(mc_path) as PackedScene
-			
+		
 		if is_instance_valid(mc_packed):
 			mobile_controls = mc_packed.instantiate()
-			# Se añade como hijo directo del gameplay (o idealmente 
-			# a un CanvasLayer dedicado para UI como HUD)
 			add_child(mobile_controls)
+		else:
+			push_error("No se pudo cargar mobile_controls.tscn")
 
 # ════════════════════════════════════════════════════════════════
 #  CALLBACKS DE HABILIDADES ESPECIALES
