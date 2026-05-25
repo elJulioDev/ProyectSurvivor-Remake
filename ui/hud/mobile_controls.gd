@@ -6,81 +6,89 @@ extends CanvasLayer
 @onready var dash_button   : TouchScreenButton   = $Control/DashButton
 
 var _player : Node = null
-var _aim_vec : Vector2 = Vector2.ZERO
-var _shooting : bool = false
+
+# ── OPTIMIZACIÓN: StringNames cacheados para evitar Allocs en memoria ──
+const A_MOVE_R := &"move_right"
+const A_MOVE_L := &"move_left"
+const A_MOVE_D := &"move_down"
+const A_MOVE_U := &"move_up"
+const A_AIM_R  := &"aim_right"
+const A_AIM_L  := &"aim_left"
+const A_AIM_D  := &"aim_down"
+const A_AIM_U  := &"aim_up"
+const A_DASH   := &"dash"
+
+const ALL_ACTIONS: Array[StringName] = [
+	A_MOVE_R, A_MOVE_L, A_MOVE_D, A_MOVE_U, 
+	A_AIM_R, A_AIM_L, A_AIM_D, A_AIM_U, A_DASH
+]
 
 func _ready() -> void:
-	# Solo mostrar en móvil
 	if not GameManager.is_mobile():
 		queue_free()
 		return
 
-	# Esperar que el jugador esté en escena
 	await get_tree().process_frame
 	_player = get_tree().get_first_node_in_group("player")
 
-	aim_joystick.analogic_changed.connect(_on_aim_changed)
 	dash_button.pressed.connect(_on_dash_pressed)
-
-	# Ocultar dash hasta que se desbloquee
 	dash_button.visible = false
-
 
 func _process(_delta: float) -> void:
 	if not is_instance_valid(_player):
 		return
 
-	# ── Movimiento ────────────────────────────────────────────────
+	# 1. Movimiento (Joystick Izquierdo)
 	var mv : Vector2 = move_joystick.value
+	_set_axis(A_MOVE_R, A_MOVE_L, mv.x)
+	_set_axis(A_MOVE_D, A_MOVE_U, mv.y)
 
-	# Inyectar como acciones de Input
-	_set_axis("move_right", "move_left",  mv.x)
-	_set_axis("move_down",  "move_up",    mv.y)
-
-	# ── Apuntado ──────────────────────────────────────────────────
-	if _aim_vec.length_squared() > 0.01:
-		_set_axis("aim_right", "aim_left", _aim_vec.x)
-		_set_axis("aim_down",  "aim_up",   _aim_vec.y)
-
-		# Actualizar aim_angle del jugador directamente
-		_player.aim_angle = _aim_vec.angle()
-
-		# Disparo automático mientras haya input en el joystick derecho
-		if not _shooting:
-			_shooting = true
+	# 2. Apuntado y Disparo (Joystick Derecho)
+	var aim : Vector2 = aim_joystick.value
+	
+	# Comprobamos si el jugador está moviendo el joystick derecho 
+	# (usamos > 0.01 como zona muerta para evitar disparos accidentales)
+	if aim.length_squared() > 0.01:
+		# Modificamos la variable directamente como esperaba player.gd
+		_player.aim_angle = aim.angle()
+		# Llamamos a la función de ataque continuamente mientras se mantenga presionado
 		_player.attack()
-	else:
-		# Sin input en joystick derecho: liberar acciones de aim
-		_release_action("aim_right")
-		_release_action("aim_left")
-		_release_action("aim_up")
-		_release_action("aim_down")
-		_shooting = false
 
-	# ── Mostrar dash si se desbloqueó ─────────────────────────────
-	if is_instance_valid(_player) and "dash_unlocked" in _player:
-		dash_button.visible = _player.dash_unlocked
+#  SISTEMA DE RESETEO ANTI-STUCK
 
+## Se llama desde gameplay.gd al abrir el menú de mejora
+func hide_and_release() -> void:
+	visible = false
+	set_process(false) 
+	
+	# 1. Reseteo forzado del estado interno del plugin
+	var joysticks: Array = [move_joystick, aim_joystick]
+	for joy in joysticks:
+		if is_instance_valid(joy):
+			joy._reset_values()           
+			joy._touch_index = -1         
+			joy._click_in = false
+			joy._drag_started_inside = false
+			joy._dynamic_active = false
+	
+	# 2. Forzamos la liberación en el Input global
+	for action in ALL_ACTIONS:
+		_release_action(action)
 
-func _on_aim_changed(vec: Vector2, _dist, _ang, _angcw, _angccw) -> void:
-	_aim_vec = vec
+## Se llama desde gameplay.gd al cerrar el menú de mejora
+func show_controls() -> void:
+	visible = true
+	set_process(true) 
 
+#  HELPERS DE INPUT
 
 func _on_dash_pressed() -> void:
-	if is_instance_valid(_player):
-		# Simular la acción "dash" igual que el teclado
-		var ev := InputEventAction.new()
-		ev.action  = "dash"
-		ev.pressed = true
-		Input.parse_input_event(ev)
+	_press_action(A_DASH)
+	await get_tree().process_frame
+	_release_action(A_DASH)
 
-
-# ── Helpers ───────────────────────────────────────────────────────
-
-func _set_axis(pos_action: String, neg_action: String, value: float) -> void:
-	# Umbral mínimo para evitar drift
+func _set_axis(pos_action: StringName, neg_action: StringName, value: float) -> void:
 	var dead : float = 0.12
-
 	if value > dead:
 		_press_action(pos_action, value)
 		_release_action(neg_action)
@@ -91,40 +99,17 @@ func _set_axis(pos_action: String, neg_action: String, value: float) -> void:
 		_release_action(pos_action)
 		_release_action(neg_action)
 
-
-func _press_action(action: String, strength: float = 1.0) -> void:
-	if not InputMap.has_action(action):
-		return
+func _press_action(action: StringName, strength: float = 1.0) -> void:
+	if not InputMap.has_action(action): return
 	var ev := InputEventAction.new()
 	ev.action   = action
 	ev.pressed  = true
 	ev.strength = strength
 	Input.parse_input_event(ev)
 
-
-func _release_action(action: String) -> void:
-	if not InputMap.has_action(action):
-		return
+func _release_action(action: StringName) -> void:
+	if not InputMap.has_action(action): return
 	var ev := InputEventAction.new()
 	ev.action  = action
 	ev.pressed = false
 	Input.parse_input_event(ev)
-
-func _is_mobile() -> bool:
-	return OS.get_name() in ["Android", "iOS"]
-	# return true
-
-func show_controls() -> void:
-	$Control.visible = true
-
-func hide_and_release() -> void:
-	$Control.visible = false
-	_release_action("move_right")
-	_release_action("move_left")
-	_release_action("move_up")
-	_release_action("move_down")
-	_release_action("aim_right")
-	_release_action("aim_left")
-	_release_action("aim_up")
-	_release_action("aim_down")
-	_shooting = false
