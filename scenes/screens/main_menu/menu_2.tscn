@@ -1,4 +1,7 @@
-extends Node2D
+[gd_scene format=3 uid="uid://cv8nsflmdxdwf"]
+
+[sub_resource type="GDScript" id="GDScript_38seo"]
+script/source = "extends Node2D
 
 ## ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ##  scenes/menu.gd — ProyectSurvivor
@@ -174,8 +177,8 @@ func _process(delta: float) -> void:
 # ── Input ─────────────────────────────────────────────────────────
 
 func _unhandled_input(event: InputEvent) -> void:
-	if event is InputEventMouseButton \
-			and event.pressed \
+	if event is InputEventMouseButton \\
+			and event.pressed \\
 			and event.button_index == MOUSE_BUTTON_LEFT:
 		var mp := _virtual_mouse()
 		if _btn_rect(BTN_Y0).has_point(mp):
@@ -193,7 +196,7 @@ func _unhandled_input(event: InputEvent) -> void:
 				get_tree().quit()
 
 func _go_play() -> void:
-	GameManager.goto_scene("res://scenes/screens/character_select/character_select.tscn")
+	GameManager.goto_scene(\"res://scenes/screens/character_select/character_select.tscn\")
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -208,9 +211,9 @@ func _draw() -> void:
 	_draw_scanlines()
 	_draw_title()
 	_draw_tagline()
-	_draw_button(BTN_Y0, "  INICIAR JUEGO", C_RED,
+	_draw_button(BTN_Y0, \"  INICIAR JUEGO\", C_RED,
 				 _play_scale, _play_glow, 28)
-	_draw_button(BTN_Y1, "  SALIR",
+	_draw_button(BTN_Y1, \"  SALIR\",
 				 Color(0.314, 0.314, 0.431),
 				 _exit_scale, _exit_glow, 26)
 	_draw_key_hint()
@@ -267,7 +270,7 @@ func _draw_scanlines() -> void:
 		draw_line(Vector2(0.0, sl.y), Vector2(VW, sl.y),
 				  Color(1.0, 1.0, 1.0, sl.alpha), 2.0)
 
-# ── Título "PROYECT / SURVIVOR" ───────────────────────────────────
+# ── Título \"PROYECT / SURVIVOR\" ───────────────────────────────────
 
 func _draw_title() -> void:
 	var gx  := randf_range(-4.0, 4.0) if _glitch_active else 0.0
@@ -276,17 +279,17 @@ func _draw_title() -> void:
 	var fst := 80   # tamaño fuente título
 
 	# Efecto chromatic aberration (sombras desplazadas)
-	_text_center("PROYECT", Vector2(cx + gx + 3.0, ty + 3.0), fst,
+	_text_center(\"PROYECT\", Vector2(cx + gx + 3.0, ty + 3.0), fst,
 				 Color(0.706, 0.0, 0.0, 1.0))
-	_text_center("PROYECT", Vector2(cx + gx - 3.0, ty + 1.0), fst,
+	_text_center(\"PROYECT\", Vector2(cx + gx - 3.0, ty + 1.0), fst,
 				 Color(0.0, 0.471, 0.510, 1.0))
 	# Texto principal
-	_text_center("PROYECT", Vector2(cx + gx, ty), fst, C_WHITE)
+	_text_center(\"PROYECT\", Vector2(cx + gx, ty), fst, C_WHITE)
 
 	# Subtítulo pulsante
 	var beat     : float = abs(sin(_timer * 0.9))
 	var sub_col  := Color(0.784 + beat * 0.216, beat * 0.078, beat * 0.078)
-	var sub_str  := "SURVIVOR"
+	var sub_str  := \"SURVIVOR\"
 	var fss      := 24
 	var sw       := _str_w(sub_str, fss)
 	var sy       := 190.0
@@ -306,7 +309,7 @@ func _draw_title() -> void:
 
 func _draw_tagline() -> void:
 	var cy := 240.0 + sin(_timer * 0.7) * 2.0
-	_text_center("Sobrevive. Evoluciona. Muere de pie.", Vector2(VW * 0.5, cy), 18, C_GRAY)
+	_text_center(\"Sobrevive. Evoluciona. Muere de pie.\", Vector2(VW * 0.5, cy), 18, C_GRAY)
 
 # ── Botón genérico ────────────────────────────────────────────────
 
@@ -349,7 +352,7 @@ func _draw_button(btn_y: float, label: String, accent: Color,
 # ── Hint de teclado ───────────────────────────────────────────────
 
 func _draw_key_hint() -> void:
-	_text_center("ESPACIO  /  ENTER  para iniciar",
+	_text_center(\"ESPACIO  /  ENTER  para iniciar\",
 				 Vector2(VW * 0.5, 490.0), 18,
 				 Color(0.216, 0.227, 0.294))
 
@@ -368,19 +371,19 @@ func _draw_controls_panel() -> void:
 			  Color(C_BORDER.r, C_BORDER.g, C_BORDER.b, 0.784), false, 1.0)
 
 	# Cabecera
-	_text_center("CONTROLES", Vector2(px + pw * 0.5, py + 10.0),
+	_text_center(\"CONTROLES\", Vector2(px + pw * 0.5, py + 10.0),
 				 15, C_CYAN_DIM)
 	draw_line(Vector2(px + 12.0, py + 28.0),
 			  Vector2(px + pw - 12.0, py + 28.0), C_BORDER, 1.0)
 
 	# Filas de controles
 	var controls := [
-		["WASD",        "Mover"],
-		["Mouse",       "Apuntar"],
-		["Click Izq",   "Disparar"],
-		["1 – 4",       "Cambiar arma"],
-		["Ctrl",        "Dash"],
-		["ESC / Enter", "Pausa"],
+		[\"WASD\",        \"Mover\"],
+		[\"Mouse\",       \"Apuntar\"],
+		[\"Click Izq\",   \"Disparar\"],
+		[\"1 – 4\",       \"Cambiar arma\"],
+		[\"Ctrl\",        \"Dash\"],
+		[\"ESC / Enter\", \"Pausa\"],
 	]
 	var row_h := 18.0
 	var fs_c  := 16
@@ -392,7 +395,7 @@ func _draw_controls_panel() -> void:
 # ── Versión ───────────────────────────────────────────────────────
 
 func _draw_version() -> void:
-	var t  := "v0.1-alpha  -  ProyectSurvivor"
+	var t  := \"v0.1-alpha  -  ProyectSurvivor\"
 	var tw := _str_w(t, 14)
 	_text(t, Vector2(VW - tw - 12.0, VH - 24.0), 14,
 		  Color(0.137, 0.145, 0.204))
@@ -436,3 +439,7 @@ func _str_w(t: String, fs: int) -> float:
 ## Entrada requerida por el sistema de escenas de Main.gd
 func setup(_data: Dictionary) -> void:
 	pass
+"
+
+[node name="Menu" type="Node2D" unique_id=100000001]
+script = SubResource("GDScript_38seo")

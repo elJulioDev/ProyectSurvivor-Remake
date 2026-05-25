@@ -28,7 +28,6 @@ script = ExtResource("4_qixtg")
 [node name="Player" parent="World" unique_id=1871687937 instance=ExtResource("5_876sc")]
 
 [node name="Camera2D" type="Camera2D" parent="." unique_id=584623327]
-zoom = Vector2(1.2, 1.2)
 limit_left = -1
 limit_top = -1
 limit_right = 11999
