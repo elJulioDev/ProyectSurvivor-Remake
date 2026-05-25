@@ -1,6 +1,6 @@
 [gd_scene format=3 uid="uid://daig871mpycsa"]
 
-[ext_resource type="Script" uid="uid://lbco4d7tvpgt" path="res://scenes/gameplay.gd" id="1_6p5th"]
+[ext_resource type="Script" uid="uid://lbco4d7tvpgt" path="res://scenes/levels/gameplay/gameplay.gd" id="1_6p5th"]
 [ext_resource type="Script" uid="uid://cudqalr7suo7i" path="res://core/world/background_layer.gd" id="2_rokjk"]
 [ext_resource type="Script" uid="uid://1inuaf6yhij6" path="res://core/managers/blood_system.gd.gd" id="4_qixtg"]
 [ext_resource type="PackedScene" uid="uid://j1e488b6hoow" path="res://entities/player/player.tscn" id="5_876sc"]

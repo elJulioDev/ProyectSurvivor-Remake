@@ -150,9 +150,9 @@ func _show_upgrade_screen() -> void:
 	if is_instance_valid(mobile_controls):
 		mobile_controls.hide_and_release()
 
-	var upgrade_packed := load("res://scenes/upgrade.tscn") as PackedScene
+	var upgrade_packed := load("res://ui/upgrade_screen/upgrade.tscn") as PackedScene
 	if not upgrade_packed:
-		push_error("gameplay.gd: no se encontró res://scenes/upgrade.tscn")
+		push_error("gameplay.gd: no se encontró res://ui/upgrade_screen/upgrade.tscn")
 		get_tree().paused = false
 		_upgrade_active   = false
 		return
@@ -186,7 +186,7 @@ func _show_upgrade_screen() -> void:
 func _on_player_died() -> void:
 	game_over = true
 	await get_tree().create_timer(1.2).timeout
-	GameManager.goto_scene("res://scenes/game_over.tscn", {
+	GameManager.goto_scene("res://scenes/screens/game_over/game_over.tscn", {
 		"score": score,
 		"time":  _format_time(game_time),
 	})

@@ -1,6 +1,6 @@
 [gd_scene format=3 uid="uid://c770a2dvki4n5"]
 
-[ext_resource type="Script" uid="uid://b5u4bj0gpuu2m" path="res://scenes/debug_panel.gd" id="1_7of2g"]
+[ext_resource type="Script" uid="uid://b5u4bj0gpuu2m" path="res://scenes/tools/debug_panel/debug_panel.gd" id="1_7of2g"]
 
 [node name="DebugPanel" type="CanvasLayer" unique_id=2021326071]
 layer = 10

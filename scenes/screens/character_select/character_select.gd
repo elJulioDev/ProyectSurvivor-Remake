@@ -115,14 +115,14 @@ func _unhandled_input(event: InputEvent) -> void:
 			KEY_ENTER, KEY_SPACE:
 				_confirm(_selected_idx)
 			KEY_ESCAPE:
-				GameManager.goto_scene("res://scenes/menu.tscn")
+				GameManager.goto_scene("res://scenes/screens/main_menu/menu.tscn")
 
 func _confirm(idx: int) -> void:
 	_input_cd = 0.5
 	GameManager.selected_character = _characters[idx]
 	print("[CharacterSelect] Seleccionado: ", _characters[idx].character_name)
 	# Lanza gameplay con la pantalla de carga estándar
-	GameManager.goto_scene("res://scenes/gameplay.tscn")
+	GameManager.goto_scene("res://scenes/levels/gameplay/gameplay.tscn")
 
 # ── Rendering ─────────────────────────────────────────────────────
 

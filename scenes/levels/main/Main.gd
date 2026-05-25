@@ -17,7 +17,7 @@ extends Node
 # Cambio 1: añadir character_select al array de escenas con carga pesada
 # (opcional, la escena es ligera):
 const LOADING_REQUIRED : PackedStringArray = [
-	"res://scenes/gameplay.tscn",
+	"res://scenes/levels/gameplay/gameplay.tscn",
 	# "res://scenes/character_select.tscn",  # solo si es pesada
 ]
 
@@ -28,7 +28,7 @@ var _skip_loading : bool = false
 
 func _ready() -> void:
 	GameManager.scene_change_requested.connect(_on_scene_change)
-	_load_scene("res://scenes/menu.tscn", {})
+	_load_scene("res://scenes/screens/main_menu/menu.tscn", {})
 
 func _on_scene_change(path: String, data: Dictionary) -> void:
 	call_deferred("_load_scene", path, data)
@@ -66,7 +66,7 @@ func _load_scene(path: String, data: Dictionary) -> void:
 # ── Carga con loading.tscn como intermediario ─────────────────────
 
 func _load_via_loading_screen(target_path: String, target_data: Dictionary) -> void:
-	const LOADING_SCENE := "res://scenes/loading.tscn"
+	const LOADING_SCENE := "res://scenes/screens/loading/loading.tscn"
 
 	var loading_packed := load(LOADING_SCENE) as PackedScene
 	if not loading_packed:

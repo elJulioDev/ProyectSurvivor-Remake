@@ -30,7 +30,7 @@ const BAR_H : float = 3.0
 var VW : float = 1280.0
 var VH : float =  720.0
 
-var _target_scene  : String     = "res://scenes/gameplay.tscn"
+var _target_scene  : String     = "res://scenes/levels/gameplay/gameplay.tscn"
 var _target_data   : Dictionary = {}
 
 var _progress      : float = 0.0   # real (del loader)
@@ -54,7 +54,7 @@ func _ready() -> void:
 	_font = ThemeDB.fallback_font
 
 func setup(data: Dictionary) -> void:
-	_target_scene = data.get("target", "res://scenes/gameplay.tscn")
+	_target_scene = data.get("target", "res://scenes/levels/gameplay/gameplay.tscn")
 	_target_data  = data.get("data",   {})
 	
 	# 1. Usar el GameManager (Centralizado) para saber si es móvil o si forzamos debug

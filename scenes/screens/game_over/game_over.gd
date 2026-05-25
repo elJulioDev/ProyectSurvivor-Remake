@@ -280,10 +280,10 @@ func _unhandled_input(event: InputEvent) -> void:
 			KEY_SPACE, KEY_ENTER, KEY_ESCAPE: _go_menu()
 
 func _go_retry() -> void:
-	GameManager.goto_scene("res://scenes/gameplay.tscn", {})
+	GameManager.goto_scene("res://scenes/levels/gameplay/gameplay.tscn", {})
 
 func _go_menu() -> void:
-	GameManager.goto_scene("res://scenes/menu.tscn", {})
+	GameManager.goto_scene("res://scenes/screens/main_menu/menu.tscn", {})
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #  DIBUJO
