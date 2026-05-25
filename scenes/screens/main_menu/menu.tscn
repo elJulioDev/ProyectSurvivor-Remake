@@ -307,9 +307,9 @@ text = "INICIAR JUEGO"
 [node name="AccentBar" type="ColorRect" parent="ButtonsContainer/BtnPlayWrapper/BtnPlay" unique_id=644715204]
 layout_mode = 0
 offset_left = 10.0
-offset_top = 8.0
+offset_top = 11.0
 offset_right = 15.0
-offset_bottom = 56.0
+offset_bottom = 59.0
 mouse_filter = 2
 color = Color(0.8235294, 0.11764706, 0.11764706, 1)
 
@@ -346,9 +346,9 @@ text = "AJUSTES"
 [node name="AccentBar" type="ColorRect" parent="ButtonsContainer/BtnSettingsWrapper/BtnSettings" unique_id=465199929]
 layout_mode = 0
 offset_left = 10.0
-offset_top = 8.0
+offset_top = 11.0
 offset_right = 15.0
-offset_bottom = 56.0
+offset_bottom = 59.0
 mouse_filter = 2
 color = Color(0, 0.8235294, 0.8627451, 1)
 
@@ -385,8 +385,8 @@ text = "SALIR"
 [node name="AccentBar" type="ColorRect" parent="ButtonsContainer/BtnExitWrapper/BtnExit" unique_id=1823980750]
 layout_mode = 0
 offset_left = 10.0
-offset_top = 8.0
+offset_top = 11.0
 offset_right = 15.0
-offset_bottom = 56.0
+offset_bottom = 59.0
 mouse_filter = 2
 color = Color(0.3137255, 0.3137255, 0.43137255, 1)

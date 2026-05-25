@@ -1,7 +1,7 @@
 [gd_resource type="Resource" script_class="WeaponData" format=3 uid="uid://cjj0007n6x7vi"]
 
 [ext_resource type="Script" uid="uid://bicdaci6tavf0" path="res://entities/weapons/weapon_data.gd" id="1_20lv8"]
-[ext_resource type="AudioStream" uid="uid://cvm0i2qf2l35e" path="res://assets/sounds/shotgun_fire.wav" id="1_s71f7"]
+[ext_resource type="AudioStream" uid="uid://b5f3wup2pv6ev" path="res://assets/sounds/shotgun.wav" id="1_s71f7"]
 
 [resource]
 script = ExtResource("1_20lv8")
