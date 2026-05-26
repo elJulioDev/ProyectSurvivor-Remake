@@ -2,8 +2,9 @@
 
 [ext_resource type="Script" uid="uid://b5djra71hbdur" path="res://addons/virtual_joystick_plus/virtual_joystick_plus.gd" id="1_7vkj0"]
 [ext_resource type="Script" uid="uid://bf766uw1v7wo6" path="res://ui/hud/mobile_controls.gd" id="1_8ea2h"]
-[ext_resource type="Texture2D" uid="uid://dq6v5wfxv7uqo" path="res://addons/virtual_joystick_plus/resources/textures/joystick_texture_5.png" id="2_8ea2h"]
 [ext_resource type="Texture2D" uid="uid://dai4rtwqalygn" path="res://addons/virtual_joystick_plus/resources/textures/stick_texture_5.png" id="3_7d0mf"]
+[ext_resource type="Texture2D" uid="uid://imqks667gst5" path="res://addons/virtual_joystick_plus/resources/textures/joystick_texture_3.png" id="3_k3jjs"]
+[ext_resource type="Texture2D" uid="uid://d3p3mstfnvqyq" path="res://addons/virtual_joystick_plus/resources/textures/stick_texture_2.png" id="4_253gy"]
 [ext_resource type="Texture2D" uid="uid://be76pt2hytq3q" path="res://icon.svg" id="4_k3jjs"]
 
 [node name="MobileControls" type="CanvasLayer" unique_id=679982900]
@@ -31,10 +32,11 @@ grow_vertical = 0
 pivot_offset = Vector2(250, 175)
 script = ExtResource("1_7vkj0")
 joystick_mode = 1
-joystick_use_textures = false
-joystick_texture = ExtResource("2_8ea2h")
+joystick_preset_texture = 3
+joystick_texture = ExtResource("3_k3jjs")
 stick_use_textures = false
-stick_texture = ExtResource("3_7d0mf")
+stick_preset_texture = 2
+stick_texture = ExtResource("4_253gy")
 metadata/_custom_type_script = "uid://b5djra71hbdur"
 
 [node name="AimJoystick" type="Control" parent="Control" unique_id=2016760727]
@@ -52,8 +54,8 @@ grow_vertical = 0
 pivot_offset = Vector2(250, 175)
 script = ExtResource("1_7vkj0")
 joystick_mode = 1
-joystick_use_textures = false
-joystick_texture = ExtResource("2_8ea2h")
+joystick_preset_texture = 3
+joystick_texture = ExtResource("3_k3jjs")
 stick_use_textures = false
 stick_texture = ExtResource("3_7d0mf")
 metadata/_custom_type_script = "uid://b5djra71hbdur"

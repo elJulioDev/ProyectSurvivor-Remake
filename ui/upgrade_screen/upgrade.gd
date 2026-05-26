@@ -96,6 +96,12 @@ var _cards_start_x : float = 0.0
 var _font          : Font
 var _sidebar_scroll: float = 0.0   # Para cuando hay muchas mejoras
 
+# ── Touch móvil ───────────────────────────────────────────────────
+var _touch_pressed_idx : int   = -1   # Carta donde empezó el toque
+var _touch_id          : int   = -1   # Finger ID activo
+var _touch_start_pos   : Vector2 = Vector2.ZERO
+const TOUCH_DRAG_THRESHOLD := 20.0   # px — si arrastra más, cancela
+
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #  INIT
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -143,7 +149,7 @@ func _process(delta: float) -> void:
 			_hovered_idx = i
 
 	for i in range(_options.size()):
-		var target := 1.045 if i == _hovered_idx else 1.0
+		var target := 1.045 if (i == _hovered_idx or i == _touch_pressed_idx) else 1.0
 		_hover_scales[i] += (target - _hover_scales[i]) * 0.15 * dt
 		_hover_scales[i]  = clampf(_hover_scales[i], 0.98, 1.06)
 
@@ -157,11 +163,43 @@ func _unhandled_input(event: InputEvent) -> void:
 	if _input_cooldown > 0.0:
 		return
 
+	# ── Touch móvil (pantalla táctil) ─────────────────────────────
+	if event is InputEventScreenTouch:
+		if event.pressed:
+			# Registrar la carta bajo el dedo en el momento del toque
+			if _touch_id == -1:
+				_touch_id        = event.index
+				_touch_start_pos = event.position
+				var local_pos : Vector2 = get_global_transform().affine_inverse() * event.position
+				_touch_pressed_idx = -1
+				for i in range(_options.size()):
+					if _get_card_rect(i).has_point(local_pos):
+						_touch_pressed_idx = i
+						break
+		else:
+			# Finger levantado — confirmar solo si es el mismo dedo
+			# y no hubo arrastre excesivo
+			if event.index == _touch_id:
+				var drag_dist : float = event.position.distance_to(_touch_start_pos)
+				if _touch_pressed_idx >= 0 and drag_dist < TOUCH_DRAG_THRESHOLD:
+					_confirm(_touch_pressed_idx)
+				_touch_id          = -1
+				_touch_pressed_idx = -1
+		return
+
+	# ── Arrastre táctil (cancelar si se movió mucho) ──────────────
+	if event is InputEventScreenDrag:
+		if event.index == _touch_id:
+			var drag_dist : float = event.position.distance_to(_touch_start_pos)
+			if drag_dist >= TOUCH_DRAG_THRESHOLD:
+				_touch_pressed_idx = -1   # Cancela la selección
+		return
+
+	# ── Mouse (PC / emulación) ────────────────────────────────────
 	if event is InputEventMouseButton and event.pressed:
 		if event.button_index == MOUSE_BUTTON_LEFT:
 			if _hovered_idx >= 0:
 				_confirm(_hovered_idx)
-		# Scroll para la sidebar
 		elif event.button_index == MOUSE_BUTTON_WHEEL_UP:
 			_sidebar_scroll = maxf(0.0, _sidebar_scroll - SIDEBAR_ROW * 2)
 		elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
@@ -639,7 +677,7 @@ func _draw_card(index: int, key: String) -> void:
 	var rbg     : Color = RARITY_BG.get(rarity, Color8(18, 18, 22))
 	var cat_col : Color = CATEGORY_COLOR.get(cat, Color(0.588, 0.588, 0.588))
 
-	var is_hov := (index == _hovered_idx)
+	var is_hov := (index == _hovered_idx or index == _touch_pressed_idx)
 	var card_scale : float = _hover_scales[index]
 
 	var bx := _cards_start_x + index * (CARD_W + CARD_GAP)
