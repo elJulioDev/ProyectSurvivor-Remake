@@ -80,3 +80,7 @@ func is_mobile() -> bool:
 		return true
 	# OS.has_feature("mobile") es la forma oficial y más robusta en Godot 4 para exportaciones
 	return OS.get_name() in ["Android", "iOS"] or OS.has_feature("mobile")
+
+func _ready() -> void:
+	if is_mobile():
+		DisplayServer.window_set_size(Vector2i(1152, 648))

@@ -12,7 +12,7 @@ extends Node2D
 @onready var enemy_proj_manager : EnemyProjectileManager = $EnemyProjectileManager
 
 # ── Boss ──────────────────────────────────────────────────────────
-const BOSS_INTERVAL_SECS : float = 1.0   # 300.0 para 5 minutos
+const BOSS_INTERVAL_SECS : float = 120.0   # 300.0 para 5 minutos
 const BOSS_SPAWN_REDUCTION := 0.25         # spawn al 25% mientras hay boss
 
 var _next_boss_time  : float = BOSS_INTERVAL_SECS
