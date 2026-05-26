@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="BossData" format=3 uid="uid://ckig4tbxdi8m3"]
+
+[ext_resource type="Script" uid="uid://xerrwerycnbl" path="res://entities/boss/boss_data.gd" id="1_bjnso"]
+[ext_resource type="Texture2D" uid="uid://dja7hf0nhuk4p" path="res://entities/boss/sprites/patricio.png" id="2_mukmn"]
+
+[resource]
+script = ExtResource("1_bjnso")
+boss_name = "MACHUCA"
+base_health = 3000.0
+base_damage = 80
+base_speed = 150.0
+size = 150.0
+xp_reward = 400
+sprite_texture = ExtResource("2_mukmn")
+spawn_weight = 10.0
+metadata/_custom_type_script = "uid://xerrwerycnbl"

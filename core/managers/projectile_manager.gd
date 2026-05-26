@@ -231,6 +231,26 @@ func _physics_process(delta: float) -> void:
 				  cfg.kb, cfg.inner, cfg.col, false,
 				  cfg.fade, cfg.fade_m, cfg.flicker, cfg.extra)
 	_pending_spawns.clear()
+	
+	# Daño al boss activo
+	var boss := get_tree().get_first_node_in_group("boss")
+	if is_instance_valid(boss) and boss.is_alive:
+		var bi := 0
+		while bi < active_count:
+			var bpos: Vector2 = boss.global_position
+			var half: float = float((boss.data.size if boss.data else 36.0) * 0.5) + float(radii[bi])
+			if positions[bi].distance_squared_to(bpos) <= half * half:
+				if not hit_sets[bi].has("boss"):
+					hit_sets[bi]["boss"] = true
+					var vn := velocities[bi].normalized()
+					boss.take_damage(float(damages[bi]), vn, 8.0 * kb_mults[bi])
+					penetrations[bi] -= 1
+					if penetrations[bi] <= 0:
+						_on_death(bi, true)
+						_remove(bi)
+						continue
+			bi += 1
+
 	_render()
 
 func _apply_homing(idx: int, delta: float) -> void:

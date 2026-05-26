@@ -1,0 +1,10 @@
+[gd_resource type="Resource" script_class="BossData" format=3 uid="uid://jue0vv116i6j"]
+
+[ext_resource type="Script" uid="uid://xerrwerycnbl" path="res://entities/boss/boss_data.gd" id="1_c4eho"]
+
+[resource]
+script = ExtResource("1_c4eho")
+base_speed = 100.0
+size = 80.0
+spawn_weight = 90.0
+metadata/_custom_type_script = "uid://xerrwerycnbl"

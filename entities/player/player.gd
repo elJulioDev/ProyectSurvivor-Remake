@@ -96,6 +96,12 @@ var aim_angle           : float = 0.0
 var _invuln_timer       : float = 0.0
 var _damage_flash_timer : float = 0.0
 
+# ── Variables para el Knockback y Noqueo ──
+var stun_timer       : float = 0.0
+var knockback_vel    : Vector2 = Vector2.ZERO
+
+var _shoot_block_timer : float = 0.0
+
 # ── Aura — timers internos ────────────────────────────────────────
 var _aura_pulse_timer : float = 0.0
 var _aura_vis_timer   : float = 0.0
@@ -242,11 +248,17 @@ func _update_timers(delta: float) -> void:
 	if _damage_flash_timer > 0.0:
 		_damage_flash_timer = maxf(0.0, _damage_flash_timer - delta)
 
+	if stun_timer > 0.0:
+		stun_timer = maxf(0.0, stun_timer - delta)
+
 	if health_regen > 0.0 and health < max_health:
 		health = minf(health + health_regen * delta, max_health)
 
 	if emergency_regen > 0.0 and health < max_health * 0.25:
 		health = minf(health + emergency_regen * delta, max_health)
+
+	if _shoot_block_timer > 0.0:
+		_shoot_block_timer -= delta
 
 # ── Movimiento ────────────────────────────────────────────────────
 
@@ -270,6 +282,14 @@ func _handle_movement(delta: float) -> void:
 						idx, 99999.0, _dash_dir, 0.0)
 		return
 
+	var dt := delta * 60.0
+
+	# Si está noqueado, ignora inputs y aplica el empuje ──
+	if stun_timer > 0.0:
+		velocity = knockback_vel
+		knockback_vel *= pow(0.85, dt) # fricción suave para que frene progresivamente
+		return
+
 	var input_dir := Vector2.ZERO
 	if Input.is_action_pressed("move_up"):    input_dir.y -= 1.0
 	if Input.is_action_pressed("move_down"):  input_dir.y += 1.0
@@ -278,8 +298,6 @@ func _handle_movement(delta: float) -> void:
 
 	if input_dir.length_squared() > 1.0:
 		input_dir = input_dir.normalized()
-
-	var dt := delta * 60.0
 
 	velocity += input_dir * accel * dt
 	velocity *= pow(FRICTION, dt)
@@ -331,7 +349,8 @@ func _process_aura(delta: float) -> void:
 # ── Dash ──────────────────────────────────────────────────────────
 
 func _attempt_dash() -> void:
-	if not dash_unlocked:
+	# Agregado: "or stun_timer > 0.0"
+	if not dash_unlocked or stun_timer > 0.0:
 		return
 	if _dash_cd_timer > 0.0:
 		_dash_buffer_timer = DASH_BUFFER_SECS
@@ -359,12 +378,19 @@ func _execute_dash() -> void:
 
 # ── API pública ───────────────────────────────────────────────────
 
-func take_damage(damage: float) -> void:
+func take_damage(damage: float, hit_dir: Vector2 = Vector2.ZERO, kb_force: float = 0.0, stun_time: float = 0.0) -> void:
 	if not is_alive or _invuln_timer > 0.0 or dash_active:
 		return
 	health -= damage * maxf(0.0, 1.0 - damage_reduction)
 	_damage_flash_timer = DAMAGE_FLASH_SECS
 	_invuln_timer       = INVULN_BASE_SECS * invulnerable_mult
+	
+	# ── Aplicar Knockback y Stun ──
+	if stun_time > 0.0:
+		stun_timer = stun_time
+	if kb_force > 0.0 and hit_dir != Vector2.ZERO:
+		knockback_vel = hit_dir.normalized() * kb_force
+
 	emit_signal("health_changed", health, max_health)
 	if health <= 0.0:
 		health   = 0.0
@@ -420,7 +446,7 @@ func _switch_weapon(index: int) -> void:
 		current_weapon_index = index
 
 func attack() -> bool:
-	if not is_alive or dash_active:
+	if not is_alive or dash_active or stun_timer > 0.0 or _shoot_block_timer > 0.0:
 		return false
 	if _weapon_controller:
 		return _weapon_controller.attempt_shoot(current_weapon_index)

@@ -11,6 +11,17 @@ extends Node2D
 @onready var projectile_manager:     ProjectileManager = $ProjectileManager
 @onready var enemy_proj_manager : EnemyProjectileManager = $EnemyProjectileManager
 
+# ── Boss ──────────────────────────────────────────────────────────
+const BOSS_INTERVAL_SECS : float = 1.0   # 300.0 para 5 minutos
+const BOSS_SPAWN_REDUCTION := 0.25         # spawn al 25% mientras hay boss
+
+var _next_boss_time  : float = BOSS_INTERVAL_SECS
+var _active_boss     : Node2D = null
+var _pre_boss_cap    : float  = 1.0        # guarda el curse_factor original
+
+# Pool dinámico que guardará las rutas de tus archivos .tres
+var _boss_pool : Array[Dictionary] = []
+
 # ── Estado ───────────────────────────────────────────────────────────
 var score:     int   = 0
 var enemies_killed: int = 0
@@ -51,6 +62,8 @@ func _ready() -> void:
 
 	_setup_camera()
 
+	_load_boss_resources_automatically()
+
 	player_ref = $World/Player
 	if player_ref:
 		player_ref.died.connect(_on_player_died)
@@ -81,6 +94,12 @@ func _process(delta: float) -> void:
 		return
 
 	game_time += delta
+	
+	# ── Chequeo de spawn de boss ──────────────────────────────────
+	if not game_over and not is_instance_valid(_active_boss):
+		if game_time >= _next_boss_time:
+			_spawn_boss()
+			
 	_update_hud()
 
 	var current_level := 1
@@ -91,6 +110,90 @@ func _process(delta: float) -> void:
 		var current_enemies : int = enemy_manager.get_active_count()
 		spawn_manager.update_spawner(delta, current_enemies,
 									 player_ref.global_position, current_level)
+
+func _spawn_boss() -> void:
+	var boss_scene := load("res://entities/boss/boss.tscn") as PackedScene
+	if not boss_scene:
+		push_error("gameplay.gd: no se encontró boss.tscn")
+		return
+		
+	_active_boss = boss_scene.instantiate()
+	add_child(_active_boss)
+
+	var minutes     := game_time / 60.0
+	var h_mult      := minf(5.5, 1.0 + (minutes / 60.0 - 1.0) * 0.32)
+	var d_mult      := 1.0 + float(maxi(0, (player_ref.level if player_ref else 1) - 1)) * 0.04
+	var s_mult      := minf(2.2, 1.0 + (minutes / 60.0) * 0.09)
+
+	var p_pos := player_ref.global_position if is_instance_valid(player_ref) \
+					else Vector2(GameManager.WORLD_WIDTH * 0.5, GameManager.WORLD_HEIGHT * 0.5)
+	var angle := (p_pos - Vector2(GameManager.WORLD_WIDTH * 0.5,
+									GameManager.WORLD_HEIGHT * 0.5)).angle() + PI
+	var dist  := 800.0
+	_active_boss.global_position = Vector2(
+		clampf(p_pos.x + cos(angle) * dist, 100.0, GameManager.WORLD_WIDTH  - 100.0),
+		clampf(p_pos.y + sin(angle) * dist, 100.0, GameManager.WORLD_HEIGHT - 100.0)
+	)
+	
+	# ── SELECCIÓN DINÁMICA POR PROBABILIDAD PONDERADA ──
+	var selected_path : String = ""
+	
+	if _boss_pool.is_empty():
+		push_error("[Boss System] ¡CRÍTICO! No hay ningún Boss .tres en la carpeta res://entities/boss/")
+		_active_boss.queue_free()
+		return
+	else:
+		# Sumar todos los pesos (ej: 100 + 50 = 150)
+		var total_weight := 0.0
+		for b in _boss_pool:
+			total_weight += b["weight"]
+			
+		# Tirar un número aleatorio entre 0 y el peso total
+		var roll := randf_range(0.0, total_weight)
+		var current := 0.0
+		
+		# Determinar en qué rango cayó la ruleta
+		for b in _boss_pool:
+			current += b["weight"]
+			if roll <= current:
+				selected_path = b["path"]
+				break
+				
+		if selected_path == "":
+			selected_path = _boss_pool[0]["path"] # Fallback de seguridad
+
+	var boss_data := load(selected_path) as BossData
+	
+	if not boss_data:
+		push_error("[Boss System] Fallo al cargar el recurso del boss: " + selected_path)
+		boss_data = load(_boss_pool.pick_random()["path"]) as BossData
+
+	# Ahora configuramos al boss con los datos reales
+	_active_boss.setup(boss_data, h_mult, d_mult, s_mult)
+	_active_boss.boss_died.connect(_on_boss_died)
+
+	if is_instance_valid(player_ref):
+		_pre_boss_cap = player_ref.get("curse_spawn_mult") \
+					if "curse_spawn_mult" in player_ref else 1.0
+		player_ref.set("curse_spawn_mult", _pre_boss_cap * BOSS_SPAWN_REDUCTION)
+					
+	print("[Boss System] Invocando jefe: %s en minuto %.1f" % [boss_data.boss_name, minutes])
+
+func _on_boss_died(pos: Vector2, points: int, xp: int) -> void:
+	score += points * 100
+	_active_boss = null
+	_next_boss_time = game_time + BOSS_INTERVAL_SECS   # próximo en 5 min/segs desde ahora
+
+    # Restaurar spawn normal
+	if is_instance_valid(player_ref):
+		player_ref.set("curse_spawn_mult", _pre_boss_cap)
+
+    # Gemas de recompensa (Fix de la advertencia INTEGER_DIVISION)
+	if is_instance_valid(gem_manager):
+		for _i in range(12):
+			gem_manager.spawn_gem(pos, int(xp / 12.0), 2.0)
+			
+	print("[Boss] Derrotado. Próximo en %.0fs" % BOSS_INTERVAL_SECS)
 
 # ════════════════════════════════════════════════════════════════
 #  DROPS DE GEMA
@@ -174,7 +277,11 @@ func _show_upgrade_screen() -> void:
 				get_tree().paused = false
 				Input.set_mouse_mode(Input.MOUSE_MODE_HIDDEN)
 				
-				# --- NUEVO: Volvemos a mostrar los joysticks al reanudar
+				# Aplicamos 0.25 segundos de bloqueo para que el arma ignore el clic de la UI
+				if is_instance_valid(player_ref):
+					player_ref._shoot_block_timer = 0.25
+				
+				# Volvemos a mostrar los joysticks al reanudar
 				if is_instance_valid(mobile_controls):
 					mobile_controls.show_controls()
 	)
@@ -251,3 +358,38 @@ func _on_enemy_shot(pos: Vector2, angle: float) -> void:
 	# Delegar al EnemyProjectileManager
 	if is_instance_valid(enemy_proj_manager):
 		enemy_proj_manager.spawn(pos, angle)
+
+func _load_boss_resources_automatically() -> void:
+	var folder_path := "res://entities/boss/"
+	var dir := DirAccess.open(folder_path)
+	
+	if not dir:
+		push_error("No se pudo acceder a la carpeta de bosses en: " + folder_path)
+		return
+
+	dir.list_dir_begin()
+	var file_name := dir.get_next()
+	
+	while file_name != "":
+		if not dir.current_is_dir():
+			if file_name.ends_with(".tres") or file_name.ends_with(".tres.remap"):
+				var clean_name := file_name.replace(".remap", "")
+				var full_path := folder_path + clean_name
+				
+				# Verificamos si ya existe para no duplicar
+				var exists := false
+				for b in _boss_pool:
+					if b["path"] == full_path:
+						exists = true
+						break
+						
+				if not exists:
+					var res = load(full_path)
+					# Obtenemos el peso de aparición (por defecto 100 si no lo encuentra)
+					var weight = res.get("spawn_weight") if res and "spawn_weight" in res else 100.0
+					_boss_pool.append({"path": full_path, "weight": weight})
+					
+		file_name = dir.get_next()
+	dir.list_dir_end()
+	
+	print("[Boss System] %d Jefes detectados para pool de probabilidad." % _boss_pool.size())
