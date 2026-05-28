@@ -2,7 +2,12 @@ extends CharacterBody2D
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #  player.gd — ProyectSurvivor
-#  CAMBIOS: velocidad reducida a estilo Vampire Survivors
+#  Sin _draw(). El render se delega a nodos hijos:
+#    · PlayerSprite (ColorRect)  — cuerpo visible
+#    · AimLine (Line2D)          — indicador de ángulo
+#    · DamageFlash (ColorRect)   — flash al recibir daño
+#    · DashGhosts (Node2D)       — estelas del dash
+#    · AuraVisual (Node2D)       — círculo y pulso del aura
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 signal died
@@ -12,15 +17,14 @@ signal xp_changed(current: int, next_level: int)
 
 const PLAYER_SIZE    := 20
 
-# ── Velocidad estilo Vampire Survivors (más lento, más táctico) ──
-const BASE_MAX_SPEED := 210.0   # era 360 — ahora similar a VS
-const BASE_ACCEL     := 38.0    # era 60  — aceleración más suave
-const FRICTION       := 0.88    # era 0.85 — más deslizamiento natural
+const BASE_MAX_SPEED := 210.0
+const BASE_ACCEL     := 38.0
+const FRICTION       := 0.88
 const SPEED_DEADZONE := 4.0
 
 const DASH_DURATION_BASE := 12.0 / 60.0
 const DASH_COOLDOWN_BASE := 45.0 / 60.0
-const DASH_SPEED         := 1100.0  # era 1440 — dash también proporcional
+const DASH_SPEED         := 1100.0
 const DASH_BUFFER_SECS   :=  9.0 / 60.0
 const MAX_GHOSTS         := 5
 
@@ -50,23 +54,19 @@ var magnet_range_mult: float = 1.0
 var magnet_speed_mult: float = 1.0
 var xp_on_kill_bonus : int   = 0
 
-# ── Pasivos (sistema v2) ──────────────────────────────────────────
-var gem_xp_mult          : float = 1.0   # Multiplicador XP de gemas (Paga Doble)
-var extra_gem_chance_bonus : float = 0.0 # Bonus prob. gemas extra por kill
+var gem_xp_mult            : float = 1.0
+var extra_gem_chance_bonus : float = 0.0
 
-# ── Maldiciones (Curse System) ────────────────────────────────────
-var curse_spawn_mult     : float = 1.0   # Mult. tasa de spawn
-var curse_health_mult    : float = 1.0   # Mult. HP enemigos
-var curse_speed_mult     : float = 1.0   # Mult. velocidad enemigos
-var curse_elite_mult     : float = 1.0   # Mult. global de dificultad
+var curse_spawn_mult  : float = 1.0
+var curse_health_mult : float = 1.0
+var curse_speed_mult  : float = 1.0
+var curse_elite_mult  : float = 1.0
 
-# ── Aura de Espinas ───────────────────────────────────────────────
-var aura_damage      : float = 0.0
-var aura_radius      : float = 80.0
-var aura_knockback   : float = 0.0
+var aura_damage            : float = 0.0
+var aura_radius            : float = 80.0
+var aura_knockback         : float = 0.0
 var aura_knockback_interval: float = 4.0
 
-# ── Armas ─────────────────────────────────────────────────────────
 var global_damage_mult    : float = 1.0
 var global_cooldown_mult  : float = 1.0
 var projectile_speed_mult : float = 1.0
@@ -74,7 +74,6 @@ var projectile_size_mult  : float = 1.0
 var extra_penetration     : int   = 0
 var knockback_mult        : float = 1.0
 
-# ── Supervivencia ─────────────────────────────────────────────────
 var lifesteal_chance : float = 0.0
 var lifesteal        : float = 5.0
 
@@ -96,19 +95,19 @@ var aim_angle           : float = 0.0
 var _invuln_timer       : float = 0.0
 var _damage_flash_timer : float = 0.0
 
-# ── Variables para el Knockback y Noqueo ──
 var stun_timer       : float = 0.0
 var knockback_vel    : Vector2 = Vector2.ZERO
 
-var _shoot_block_timer : float = 0.0
+# Estado interno
+var bleed_intensity : float = 0.0
+var bleed_cooldown  : float = 0.0
 
-# ── Aura — timers internos ────────────────────────────────────────
-var _aura_pulse_timer : float = 0.0
-var _aura_vis_timer   : float = 0.0
+var _shoot_block_timer : float = 0.0
+var _aura_pulse_timer  : float = 0.0
 
 var character_data : CharacterData = null
 
-# ── Sistema de Armas ──────────────────────────────────────────────
+# ── Armas ─────────────────────────────────────────────────────────
 var weapons : Array :
 	get:
 		if has_node("WeaponPivot/WeaponController"):
@@ -118,49 +117,48 @@ var weapons : Array :
 var unlocked_weapon_names : Array[String] = []
 var current_weapon_index  : int = 0
 
-@onready var _weapon_pivot: Node2D = get_node_or_null("WeaponPivot")
-@onready var _weapon_controller: Node2D = get_node_or_null("WeaponPivot/WeaponController")
+@onready var _weapon_pivot      : Node2D    = get_node_or_null("WeaponPivot")
+@onready var _weapon_controller : Node2D    = get_node_or_null("WeaponPivot/WeaponController")
+@onready var _sprite            : ColorRect = get_node_or_null("PlayerSprite")
+@onready var _aim_line          : Line2D    = get_node_or_null("AimLine")
+@onready var _damage_flash      : ColorRect = get_node_or_null("DamageFlash")
+@onready var _dash_ghosts       : Node2D    = get_node_or_null("DashGhosts")
+@onready var _aura_visual       : Node2D    = get_node_or_null("AuraVisual")
 
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  CICLO PRINCIPAL
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 func _ready() -> void:
 	add_to_group("player")
 	_apply_character_data()
+	
+	if is_instance_valid(_aura_visual):
+		_aura_visual.visible = false
+		
+	# Forzamos la primera actualización visual
+	_update_visuals()
 
-# ════════════════════════════════════════════════════════════════════
-#  SISTEMA DE PERSONAJE
 # ════════════════════════════════════════════════════════════════════
 
 func _apply_character_data() -> void:
 	character_data = GameManager.get_or_default_character()
 	if not character_data:
-		# Sin datos de personaje: carga la pistola por defecto y sale
 		add_weapon("Pistol")
 		return
 
-	# ── Aplicar stats base ────────────────────────────────────────
-	# Estos son los multiplicadores del personaje, ANTES de upgrades.
-	# Los upgrades (global_damage_mult, etc.) se aplican SOBRE estos.
-	max_health         = character_data.base_hp * character_data.hp_mult
-	health             = max_health
-	# Velocidad base: el player usa max_speed internamente
-	# (ajusta al nombre exacto de tu variable de velocidad)
-	# Si usas una constante, aquí la pisas con el valor del personaje:
-	# max_speed = character_data.base_speed * character_data.speed_mult
-
-	# Multiplicadores iniciales del personaje se suman a los del jugador
-	global_damage_mult   *= character_data.damage_mult
+	max_health           = character_data.base_hp * character_data.hp_mult
+	health               = max_health
+	global_damage_mult  *= character_data.damage_mult
 	global_cooldown_mult *= character_data.cooldown_mult
-	xp_mult              *= character_data.xp_mult
+	xp_mult             *= character_data.xp_mult
 
-	# ── Cargar armas de inicio ────────────────────────────────────
 	for weapon_name in character_data.starting_weapons:
-		add_weapon(weapon_name)  # usa tu función existente
+		add_weapon(weapon_name)
 
-	# ── Aplicar pasiva del personaje ──────────────────────────────
 	_apply_character_passive(character_data.passive_id, character_data.passive_value)
+
+	# Colorear sprite con el color del personaje
+	if is_instance_valid(_sprite):
+		_sprite.color = character_data.color
 
 	print("[Player] Personaje cargado: %s | Armas: %s" % [
 		character_data.character_name,
@@ -169,21 +167,13 @@ func _apply_character_data() -> void:
 
 
 func _apply_character_passive(passive_id: String, value: float) -> void:
-	## Aquí se activan las pasivas únicas de cada personaje.
-	## Añade un match nuevo por cada personaje que implementes.
 	match passive_id:
-		"health_regen":
-			# El Médico regenera HP constantemente
-			health_regen += value
-		"double_tap":
-			# El Pistolero tiene chance de disparar doble (implementar en WeaponController)
-			# Por ahora, guardamos el valor en una variable del player
-			# que WeaponController puede leer
-			set_meta("double_tap_chance", value)
-		"":
-			pass  # Sin pasiva
-		_:
-			push_warning("_apply_character_passive: pasiva desconocida '%s'" % passive_id)
+		"health_regen": health_regen += value
+		"double_tap":   set_meta("double_tap_chance", value)
+		"":             pass
+		_: push_warning("_apply_character_passive: pasiva desconocida '%s'" % passive_id)
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 func _physics_process(delta: float) -> void:
 	if not is_alive:
@@ -196,28 +186,69 @@ func _physics_process(delta: float) -> void:
 	_update_timers(delta)
 	_handle_movement(delta)
 	_process_aura(delta)
+	_process_blood_drip(delta)
 	_clamp_to_world()
 	move_and_slide()
 
-	# MODIFICACIÓN: Solo usamos el ratón para disparar si no estamos en móvil.
-	# En móvil, el disparo lo gestiona exclusivamente el mobile_controls.gd (Joystick derecho).
 	if OS.get_name() not in ["Android", "iOS"]:
 		if Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
 			attack()
 
-	_aura_vis_timer += delta
-	queue_redraw()
+	_update_visuals()
 
 # ── Apuntado ──────────────────────────────────────────────────────
 
 func _update_aim() -> void:
-    # En escritorio: apuntar con mouse
-    # En móvil: aim_angle lo setea mobile_controls.gd directamente
 	if OS.get_name() not in ["Android", "iOS"]:
 		aim_angle = (get_global_mouse_position() - global_position).angle()
-		
 	if is_instance_valid(_weapon_pivot):
 		_weapon_pivot.rotation = aim_angle
+
+# ── Visuals (sin _draw, actualizamos propiedades de nodos) ────────
+
+func _update_visuals() -> void:
+	# Calcular cuándo ocultar los nodos por frames de invulnerabilidad (parpadeo)
+	var should_hide := false
+	if _invuln_timer > 0.0 and _damage_flash_timer <= 0.0:
+		should_hide = int(_invuln_timer * 60.0) % 6 >= 3
+
+	# Calcular ratio de flash rojo (1.0 = recién golpeado, 0.0 = sano)
+	var flash_ratio := clampf(_damage_flash_timer / DAMAGE_FLASH_SECS, 0.0, 1.0)
+	var base_color := character_data.color if character_data else Color.WHITE
+	
+	# Interpolar suavemente el color base del jugador hacia rojo
+	var current_color := base_color.lerp(Color(1.0, 0.2, 0.2), flash_ratio)
+
+	# Actualizar Sprite
+	if is_instance_valid(_sprite):
+		_sprite.visible = not should_hide
+		_sprite.color = current_color # Aplica el tinte suave
+		
+		# Override de Ninja Dash
+		if ninja_dash and dash_unlocked:
+			_sprite.modulate = Color(0.63, 0.0, 1.0) if dash_active else Color.WHITE
+
+	# Actualizar AimLine para que parpadee y se tiña con el jugador
+	if is_instance_valid(_aim_line):
+		var tip := Vector2(cos(aim_angle), sin(aim_angle)) * float(PLAYER_SIZE)
+		_aim_line.set_point_position(1, tip)
+		_aim_line.visible = not should_hide
+		_aim_line.default_color = current_color # Recibe el mismo lerp rojo
+
+	# Desvanecimiento suave del DamageFlash general
+	if is_instance_valid(_damage_flash):
+		_damage_flash.visible = flash_ratio > 0.0
+		var df_color = _damage_flash.color
+		df_color.a = flash_ratio * 0.6 # Interpolación de opacidad de 0.6 hacia 0.0
+		_damage_flash.color = df_color
+
+	if is_instance_valid(_dash_ghosts):
+		_dash_ghosts.set_ghosts(_ghost_positions, ninja_dash)
+
+	if is_instance_valid(_aura_visual):
+		_aura_visual.visible = aura_damage > 0.0
+		if _aura_visual.visible:
+			_aura_visual.set_state(aura_radius, aura_knockback, _aura_pulse_timer, aura_knockback_interval)
 
 # ── Timers ────────────────────────────────────────────────────────
 
@@ -278,16 +309,14 @@ func _handle_movement(delta: float) -> void:
 			for idx in hits:
 				if not _ninja_hit_ids.has(idx):
 					_ninja_hit_ids[idx] = true
-					GameManager.enemy_manager.damage_enemy(
-						idx, 99999.0, _dash_dir, 0.0)
+					GameManager.enemy_manager.damage_enemy(idx, 99999.0, _dash_dir, 0.0)
 		return
 
 	var dt := delta * 60.0
 
-	# Si está noqueado, ignora inputs y aplica el empuje ──
 	if stun_timer > 0.0:
 		velocity = knockback_vel
-		knockback_vel *= pow(0.85, dt) # fricción suave para que frene progresivamente
+		knockback_vel *= pow(0.85, dt)
 		return
 
 	var input_dir := Vector2.ZERO
@@ -314,7 +343,7 @@ func _clamp_to_world() -> void:
 	global_position.x = clampf(global_position.x, half, GameManager.WORLD_WIDTH  - half)
 	global_position.y = clampf(global_position.y, half, GameManager.WORLD_HEIGHT - half)
 
-# ── Aura de Espinas ───────────────────────────────────────────────
+# ── Aura ──────────────────────────────────────────────────────────
 
 func _process_aura(delta: float) -> void:
 	if aura_damage <= 0.0:
@@ -326,8 +355,7 @@ func _process_aura(delta: float) -> void:
 		global_position, aura_radius)
 
 	for idx in enemies_in_range:
-		GameManager.enemy_manager.damage_enemy(
-			idx, aura_damage * delta, Vector2.ZERO, 0.0, true)
+		GameManager.enemy_manager.damage_enemy(idx, aura_damage * delta, Vector2.ZERO, 0.0, true)
 
 	if aura_knockback > 0.0:
 		_aura_pulse_timer += delta
@@ -341,15 +369,30 @@ func _process_aura(delta: float) -> void:
 				if dir.length_squared() > 0.01:
 					dir = dir.normalized()
 				else:
-					dir = Vector2(randf_range(-1.0, 1.0),
-								  randf_range(-1.0, 1.0)).normalized()
-				GameManager.enemy_manager.damage_enemy(
-					idx, 0.0, dir, aura_knockback * 350.0, true)
+					dir = Vector2(randf_range(-1.0, 1.0), randf_range(-1.0, 1.0)).normalized()
+				GameManager.enemy_manager.damage_enemy(idx, 0.0, dir, aura_knockback * 350.0, true)
+
+# Sangrado continuo
+func _process_blood_drip(delta: float) -> void:
+	if bleed_intensity > 0.0:
+		bleed_intensity -= 0.3 * delta * 60.0
+		if bleed_intensity <= 0.0:
+			bleed_intensity = 0.0
+		else:
+			bleed_cooldown -= delta * 60.0
+			if bleed_cooldown <= 0.0:
+				var particles = get_tree().get_first_node_in_group("blood_particles")
+				if is_instance_valid(particles) and particles.has_method("create_blood_drip"):
+					# Añadimos un pequeño desfase aleatorio para que el goteo sea natural
+					var drip_pos = global_position + Vector2(randf_range(-10, 10), randf_range(-10, 10))
+					particles.create_blood_drip(drip_pos, bleed_intensity)
+				
+				# A mayor herida, más rápido es el goteo
+				bleed_cooldown = maxf(2.0, 20.0 - (bleed_intensity * 0.8))
 
 # ── Dash ──────────────────────────────────────────────────────────
 
 func _attempt_dash() -> void:
-	# Agregado: "or stun_timer > 0.0"
 	if not dash_unlocked or stun_timer > 0.0:
 		return
 	if _dash_cd_timer > 0.0:
@@ -381,20 +424,54 @@ func _execute_dash() -> void:
 func take_damage(damage: float, hit_dir: Vector2 = Vector2.ZERO, kb_force: float = 0.0, stun_time: float = 0.0) -> void:
 	if not is_alive or _invuln_timer > 0.0 or dash_active:
 		return
-	health -= damage * maxf(0.0, 1.0 - damage_reduction)
+
+	var actual_damage = damage * maxf(0.0, 1.0 - damage_reduction)
+	health -= actual_damage
+	
 	_damage_flash_timer = DAMAGE_FLASH_SECS
 	_invuln_timer       = INVULN_BASE_SECS * invulnerable_mult
-	
-	# ── Aplicar Knockback y Stun ──
+
 	if stun_time > 0.0:
 		stun_timer = stun_time
+
 	if kb_force > 0.0 and hit_dir != Vector2.ZERO:
 		knockback_vel = hit_dir.normalized() * kb_force
 
 	emit_signal("health_changed", health, max_health)
+
+	# --- SISTEMA DE SANGRE ---
+	# Acumular intensidad para el goteo al caminar
+	bleed_intensity = minf(50.0, bleed_intensity + actual_damage)
+	
+	var particles := get_tree().get_first_node_in_group("blood_particles")
+	if is_instance_valid(particles):
+		var dmg_ratio := clampf(actual_damage / max_health * 6.0, 0.0, 1.0)
+		
+		# Salpicadura en la dirección del impacto
+		if particles.has_method("create_blood_splatter"):
+			particles.create_blood_splatter(global_position, hit_dir, 1.2, 8, dmg_ratio)
+			
+		# Charco instantáneo si el daño es considerable
+		if (actual_damage > 10.0 or dmg_ratio > 0.1) and particles.has_method("create_wound_stain"):
+			particles.create_wound_stain(global_position, dmg_ratio)
+
+	# --- LÓGICA DE MUERTE ---
 	if health <= 0.0:
 		health   = 0.0
 		is_alive = false
+		
+		# Explosión visceral (dejando el charco grande)
+		if is_instance_valid(particles) and particles.has_method("create_viscera_explosion"):
+			# Usamos factor 1.0 para que la explosión del jugador sea dramática
+			particles.create_viscera_explosion(global_position, 1.0)
+
+		# Ocultar todos los nodos visuales del jugador para que "desaparezca"
+		if is_instance_valid(_sprite): _sprite.visible = false
+		if is_instance_valid(_aim_line): _aim_line.visible = false
+		if is_instance_valid(_damage_flash): _damage_flash.visible = false
+		if is_instance_valid(_dash_ghosts): _dash_ghosts.visible = false
+		if is_instance_valid(_aura_visual): _aura_visual.visible = false
+		
 		emit_signal("died")
 
 func heal(amount: float) -> void:
@@ -455,74 +532,13 @@ func attack() -> bool:
 func add_weapon(weapon_file_name: String) -> void:
 	if weapon_file_name in unlocked_weapon_names:
 		return
-
 	var path := "res://entities/weapons/%s.tres" % weapon_file_name
-	
-	# Intentamos cargar el recurso directamente. 
-	# load() encontrará el .remap automáticamente en el juego exportado.
 	var weapon_res: WeaponData = load(path) as WeaponData
-	
-	# Verificamos si la carga fue exitosa en lugar de usar ResourceLoader.exists
 	if not weapon_res:
 		push_warning("add_weapon: no se encontró recurso en %s" % path)
 		return
-
 	if _weapon_controller:
 		_weapon_controller.add_weapon(weapon_res)
 		unlocked_weapon_names.append(weapon_file_name)
 	else:
 		push_error("Error: Player no tiene un nodo WeaponController!")
-
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  DIBUJO
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-func _draw() -> void:
-	if not is_alive:
-		return
-
-	var half := float(PLAYER_SIZE) * 0.5
-
-	if aura_damage > 0.0:
-		var pulse := sin(_aura_vis_timer * 2.5) * 0.5 + 0.5
-		draw_circle(Vector2.ZERO, aura_radius,
-			Color(0.58, 0.0, 1.0, 0.06 + pulse * 0.04))
-		draw_arc(Vector2.ZERO, aura_radius, 0.0, TAU, 64,
-			Color(0.78, 0.2, 1.0, 0.25 + pulse * 0.20), 2.0)
-		if aura_knockback > 0.0:
-			var pulse_progress := clampf(_aura_pulse_timer / aura_knockback_interval, 0.0, 1.0)
-			draw_arc(Vector2.ZERO, aura_radius * 0.93,
-				0.0, TAU * pulse_progress, 48,
-				Color(1.0, 0.4, 1.0, 0.55), 3.0)
-
-	if _invuln_timer > 0.0 and _damage_flash_timer <= 0.0:
-		if int(_invuln_timer * 60.0) % 6 < 3:
-			return
-
-	if dash_active and _ghost_positions.size() > 0:
-		var n := _ghost_positions.size()
-		for i in range(n):
-			var g     : Dictionary = _ghost_positions[i]
-			var alpha : float      = float(i) / float(max(1, n)) * (180.0 / 255.0)
-			var lpos  : Vector2    = to_local(g["pos"])
-			var gc    : Color      = Color(0.63, 0.0, 1.0, alpha) if ninja_dash \
-								   else Color(1.0, 1.0, 1.0, alpha)
-			draw_rect(Rect2(lpos - Vector2(half, half), Vector2(half * 2.0, half * 2.0)), gc)
-			if alpha > 0.196:
-				var ghost_tip := lpos + Vector2(cos(g["angle"]), sin(g["angle"])) * half * 2.5
-				draw_line(lpos, ghost_tip, gc, 2.0)
-
-	if ninja_dash and dash_unlocked:
-		draw_rect(Rect2(Vector2(-half - 2.0, -half - 2.0),
-						Vector2(half * 2.0 + 4.0, half * 2.0 + 4.0)),
-				  Color(0.63, 0.0, 1.0), false, 2.0)
-
-	var body_color := Color.WHITE
-	if _damage_flash_timer > 0.0:
-		var t := _damage_flash_timer / DAMAGE_FLASH_SECS
-		body_color = Color(1.0, 1.0 - t, 1.0 - t)
-
-	draw_rect(Rect2(Vector2(-half, -half), Vector2(half * 2.0, half * 2.0)), body_color)
-
-	var tip := Vector2(cos(aim_angle), sin(aim_angle)) * (float(PLAYER_SIZE) * 1.0)
-	draw_line(Vector2.ZERO, tip, body_color, 3.0)

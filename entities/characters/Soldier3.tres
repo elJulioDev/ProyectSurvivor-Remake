@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="CharacterData" format=3 uid="uid://b0bufui8u273g"]
+
+[ext_resource type="Script" uid="uid://cxaou6igm3aab" path="res://entities/characters/character_data.gd" id="1_lyrvj"]
+
+[resource]
+script = ExtResource("1_lyrvj")
+character_id = "soldier3"
+character_name = "Soldado 3"
+description = "AK47"
+color = Color(0.95416015, 0.46259117, 0.07376706, 1)
+base_speed = 215.0
+hp_mult = 1.1
+speed_mult = 1.12
+damage_mult = 1.2
+xp_mult = 1.2
+starting_weapons = Array[String](["Pistol", "AssaultRifle"])
+available_weapons = Array[String](["Pistol", "AssaultRifle"])
+metadata/_custom_type_script = "uid://cxaou6igm3aab"

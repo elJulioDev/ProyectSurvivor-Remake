@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="CharacterData" format=3 uid="uid://bbxivcw1xmpor"]
+
+[ext_resource type="Script" uid="uid://cxaou6igm3aab" path="res://entities/characters/character_data.gd" id="1_yafbw"]
+
+[resource]
+script = ExtResource("1_yafbw")
+character_id = "soldier2"
+character_name = "Soldado 2"
+description = "Sniper"
+color = Color(0.20133626, 0.74604356, 0.09547011, 1)
+xp_mult = 1.5
+starting_weapons = Array[String](["Pistol", "Sniper"])
+available_weapons = Array[String](["Pistol", "Sniper"])
+metadata/_custom_type_script = "uid://cxaou6igm3aab"

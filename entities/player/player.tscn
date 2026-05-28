@@ -2,20 +2,45 @@
 
 [ext_resource type="Script" uid="uid://byo7as7cyj06x" path="res://entities/player/player.gd" id="1_merdl"]
 [ext_resource type="Script" uid="uid://fdwfdl5n7fa8" path="res://entities/weapons/weapon_controller.gd" id="2_bls4j"]
+[ext_resource type="Script" uid="uid://cu61mq3rsrtt1" path="res://entities/player/dash_ghosts.gd" id="3_ghosts"]
+[ext_resource type="Script" uid="uid://ob4hnaorco2h" path="res://entities/player/aura_visual.gd" id="4_aura"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_0wfyh"]
 
 [node name="Player" type="CharacterBody2D" unique_id=1871687937]
 script = ExtResource("1_merdl")
 
-[node name="DrawNode" type="Node2D" parent="." unique_id=762626274]
+[node name="CollisionShape2D" type="CollisionShape2D" parent="." unique_id=1754735301]
+shape = SubResource("RectangleShape2D_0wfyh")
+
+[node name="PlayerSprite" type="ColorRect" parent="." unique_id=1111111111]
+offset_left = -10.0
+offset_top = -10.0
+offset_right = 10.0
+offset_bottom = 10.0
+mouse_filter = 2
+
+[node name="AimLine" type="Line2D" parent="." unique_id=1111111112]
+points = PackedVector2Array(0, 0, 20, 0)
+width = 3.0
+
+[node name="DashGhosts" type="Node2D" parent="." unique_id=1111111113]
+script = ExtResource("3_ghosts")
+
+[node name="DamageFlash" type="ColorRect" parent="." unique_id=1111111114]
+visible = false
+offset_left = -10.0
+offset_top = -10.0
+offset_right = 10.0
+offset_bottom = 10.0
+mouse_filter = 2
+color = Color(1, 0.2, 0.2, 0.6)
+
+[node name="AuraVisual" type="Node2D" parent="." unique_id=1111111115]
+visible = false
+script = ExtResource("4_aura")
 
 [node name="WeaponPivot" type="Node2D" parent="." unique_id=1308338523]
 
 [node name="WeaponController" type="Node2D" parent="WeaponPivot" unique_id=362908871]
 script = ExtResource("2_bls4j")
-
-[node name="HealthBar" type="Node2D" parent="." unique_id=1370185272]
-
-[node name="CollisionShape2D" type="CollisionShape2D" parent="." unique_id=1754735301]
-shape = SubResource("RectangleShape2D_0wfyh")

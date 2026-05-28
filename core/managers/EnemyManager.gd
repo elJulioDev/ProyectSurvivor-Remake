@@ -395,7 +395,10 @@ func _physics_process(delta: float) -> void:
 		var min_dist = (sizes[i] * 0.4) + 12.0
 		if dist_sq < min_dist * min_dist:
 			if player.has_method("take_damage"):
-				player.take_damage(damages[i])
+				# Calcula la dirección del impacto desde el enemigo hacia el jugador
+				var hit_dir = pos.direction_to(p_pos)
+				# Pasa el daño, dirección, fuerza de empuje (ej. 800) y tiempo de aturdimiento (0.15s)
+				player.take_damage(damages[i], hit_dir, 800.0, 0.15)
 
 		if bleed_intensities[i] > 0.0:
 			bleed_intensities[i] -= 0.3 * delta * 60.0
