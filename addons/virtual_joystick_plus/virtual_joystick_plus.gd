@@ -329,13 +329,11 @@ func _gui_input(event: InputEvent) -> void:
 
 			match joystick_mode:
 				JoystickMode.NORMAL:
-					distance = event.position.distance_to(_joystick.position)
-					_drag_started_inside = distance <= _joystick.radius * _joystick.scale + _joystick.width / 2
-					if _drag_started_inside:
-						_click_in = true
-						_update_stick(event.position)
-					else:
-						_click_in = false
+					# Al marcarlo como true directamente, cualquier toque dentro del
+					# área Rect del nodo Control activará el joystick sin mover su base.
+					_drag_started_inside = true
+					_click_in = true
+					_update_stick(event.position)
 
 				JoystickMode.DYNAMIC, JoystickMode.FOLLOW:
 					_dynamic_active = true
