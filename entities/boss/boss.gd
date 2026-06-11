@@ -94,7 +94,8 @@ func _physics_process(delta: float) -> void:
 	if _invuln_timer > 0.0:
 		_invuln_timer -= delta
 
-	_player = get_tree().get_first_node_in_group("player")
+	if not is_instance_valid(_player):
+		_player = get_tree().get_first_node_in_group("player")
 	if not is_instance_valid(_player):
 		return
 
@@ -149,10 +150,6 @@ func _physics_process(delta: float) -> void:
 				
 				# El cooldown será más rápido entre mayor sea la herida (igual que en EnemyManager)
 				bleed_cooldown = maxf(2.0, 20.0 - (bleed_intensity * 0.8))
-
-	# Flash de golpe
-	if _hit_flash > 0.0:
-		_hit_flash = maxf(0.0, _hit_flash - delta * 5.0)
 
 	queue_redraw()
 
