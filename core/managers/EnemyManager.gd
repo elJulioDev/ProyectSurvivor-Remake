@@ -720,3 +720,23 @@ func _cleanup_dead_enemies() -> void:
 			_kill_enemy(i)
 		else:
 			i += 1
+
+# ════════════════════════════════════════════════════════════════════════════
+#  7. BÚSQUEDA ESPACIAL — API para GameManager
+# ════════════════════════════════════════════════════════════════════════════
+
+## Devuelve el índice del enemigo más cercano a `pos` dentro de `max_r`.
+## Retorna -1 si no hay ninguno.
+func get_nearest_idx(pos: Vector2, max_r: float = 900.0) -> int:
+	var best_idx := -1
+	var best_dsq := max_r * max_r
+	for i in range(active_count):
+		var dsq := positions[i].distance_squared_to(pos)
+		if dsq < best_dsq:
+			best_dsq = dsq
+			best_idx = i
+	return best_idx
+
+## Devuelve la posición del enemigo en el índice dado.
+func get_pos(idx: int) -> Vector2:
+	return positions[idx] if idx >= 0 and idx < active_count else Vector2.ZERO
