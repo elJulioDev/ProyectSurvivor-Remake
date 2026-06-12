@@ -35,6 +35,9 @@ var mobile_controls: CanvasLayer = null
 ## True mientras hay una pantalla de upgrade visible
 var _upgrade_active: bool = false
 
+## True mientras hay pausa activa
+var _pause_active: bool = false
+
 # ── Tabla de drop de gemas por tipo de enemigo ───────────────────────
 ## key = points del enemigo  → [xp_base, extra_gems_prob, extra_gems_max]
 const GEM_DROP_TABLE : Dictionary = {
@@ -111,6 +114,12 @@ func _process(delta: float) -> void:
 		spawn_manager.update_spawner(delta, current_enemies,
 									 player_ref.global_position, current_level)
 
+func _input(event: InputEvent) -> void:
+	# Detectar Enter para pausar (y no mientras está upgrade abierto)
+	if event.is_action_pressed("ui_accept") and not _upgrade_active and not _pause_active and not game_over:
+		_show_pause_menu()
+		get_tree().root.set_input_as_handled()
+
 func _spawn_boss() -> void:
 	var boss_scene := load("res://entities/boss/boss.tscn") as PackedScene
 	if not boss_scene:
@@ -184,11 +193,11 @@ func _on_boss_died(pos: Vector2, points: int, xp: int) -> void:
 	_active_boss = null
 	_next_boss_time = game_time + BOSS_INTERVAL_SECS   # próximo en 5 min/segs desde ahora
 
-    # Restaurar spawn normal
+	# Restaurar spawn normal
 	if is_instance_valid(player_ref):
 		player_ref.set("curse_spawn_mult", _pre_boss_cap)
 
-    # Gemas de recompensa (Fix de la advertencia INTEGER_DIVISION)
+	# Gemas de recompensa (Fix de la advertencia INTEGER_DIVISION)
 	if is_instance_valid(gem_manager):
 		for _i in range(12):
 			gem_manager.spawn_gem(pos, int(xp / 12.0), 2.0)
@@ -284,6 +293,44 @@ func _show_upgrade_screen() -> void:
 				# Volvemos a mostrar los joysticks al reanudar
 				if is_instance_valid(mobile_controls):
 					mobile_controls.show_controls()
+	)
+
+func _show_pause_menu() -> void:
+	if not is_instance_valid(player_ref):
+		return
+	
+	_pause_active = true
+	get_tree().paused = true
+	
+	# Ocultamos los joysticks si existen
+	if is_instance_valid(mobile_controls):
+		mobile_controls.hide_and_release()
+	
+	var pause_packed := load("res://scenes/screens/pause/pause.tscn") as PackedScene
+	if not pause_packed:
+		push_error("gameplay.gd: no se encontró pause.tscn")
+		get_tree().paused = false
+		_pause_active = false
+		return
+	
+	var pause_node := pause_packed.instantiate()
+	upgrade_layer.add_child(pause_node)
+	
+	pause_node.continue_pressed.connect(
+		func() -> void:
+			_pause_active = false
+			
+			# Solo ocultamos el mouse al volver si NO estamos usando controles móviles
+			if not is_instance_valid(mobile_controls):
+				Input.set_mouse_mode(Input.MOUSE_MODE_HIDDEN)
+			else:
+				mobile_controls.show_controls()
+	)
+	
+	pause_node.main_menu_pressed.connect(
+		func() -> void:
+			_pause_active = false
+			GameManager.goto_scene("res://scenes/screens/main_menu/menu.tscn", {})
 	)
 
 # ════════════════════════════════════════════════════════════════
