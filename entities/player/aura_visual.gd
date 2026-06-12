@@ -17,7 +17,8 @@ func set_state(radius: float, knockback: float, pulse_timer: float, pulse_interv
 
 func _process(delta: float) -> void:
 	_vis_timer += delta
-	queue_redraw()
+	if visible:
+		queue_redraw()
 
 func _draw() -> void:
 	var pulse := sin(_vis_timer * 2.5) * 0.5 + 0.5

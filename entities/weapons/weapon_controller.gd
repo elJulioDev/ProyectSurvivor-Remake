@@ -55,14 +55,15 @@ func _physics_process(delta: float) -> void:
 
 	var frames       : float = delta * 60.0
 	var cd_mult      : float = player.global_cooldown_mult if "global_cooldown_mult" in player else 1.0
+	var needs_draw   : bool  = false
 
 	# Fade del láser hitscan
 	if laser_timer > 0.0:
 		laser_timer -= frames
 		if laser_timer <= 0.0:
 			active_laser_weapon = null
-
-	queue_redraw()
+		else:
+			needs_draw = true
 
 	for weapon in equipped_weapons:
 		# ── Cooldown principal ────────────────────────────────────
@@ -87,6 +88,15 @@ func _physics_process(delta: float) -> void:
 		# ── Fogonazo (Sniper) ─────────────────────────────────────
 		if muzzle_timers[weapon] > 0.0:
 			muzzle_timers[weapon] -= frames
+			needs_draw = true
+
+	# Solo redibujar si hay algo visible (láser, mira o fogonazo activos)
+	if not needs_draw and equipped_weapons.size() > 0:
+		var cw = equipped_weapons[player.current_weapon_index if "current_weapon_index" in player else 0]
+		needs_draw = cw.has_laser_sight
+
+	if needs_draw:
+		queue_redraw()
 
 # ════════════════════════════════════════════════════════════════════
 #  API PÚBLICA — intento de disparo desde player.gd

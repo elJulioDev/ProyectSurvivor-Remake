@@ -130,9 +130,9 @@ func _spawn_boss() -> void:
 	add_child(_active_boss)
 
 	var minutes     := game_time / 60.0
-	var h_mult      := minf(5.5, 1.0 + (minutes / 60.0 - 1.0) * 0.32)
+	var h_mult      := minf(5.5, 1.0 + maxf(0.0, minutes - 1.0) * 0.32)
 	var d_mult      := 1.0 + float(maxi(0, (player_ref.level if player_ref else 1) - 1)) * 0.04
-	var s_mult      := minf(2.2, 1.0 + (minutes / 60.0) * 0.09)
+	var s_mult      := minf(2.2, 1.0 + maxf(0.0, minutes - 1.0) * 0.09)
 
 	var p_pos := player_ref.global_position if is_instance_valid(player_ref) \
 					else Vector2(GameManager.WORLD_WIDTH * 0.5, GameManager.WORLD_HEIGHT * 0.5)
