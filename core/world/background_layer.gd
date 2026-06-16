@@ -63,6 +63,8 @@ void fragment() {
 """
 
 var _mat : ShaderMaterial = null
+var _last_cam_pos : Vector2 = Vector2(-99999, -99999)
+var _last_zoom    : Vector2 = Vector2.ONE
 
 func _ready() -> void:
 	_mat        = ShaderMaterial.new()
@@ -72,6 +74,20 @@ func _ready() -> void:
 	material    = _mat
 
 func _process(_delta: float) -> void:
+	var cam := get_viewport().get_camera_2d()
+	if not cam:
+		return
+
+	var center : Vector2 = cam.get_screen_center_position()
+	var zoom   : Vector2 = cam.zoom
+
+	# Solo redibujar si la camara se movio o hizo zoom
+	var diff := center - _last_cam_pos
+	if diff.length_squared() < 1.0 and zoom == _last_zoom:
+		return
+
+	_last_cam_pos = center
+	_last_zoom    = zoom
 	queue_redraw()
 
 func _draw() -> void:

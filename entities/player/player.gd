@@ -190,7 +190,7 @@ func _physics_process(delta: float) -> void:
 	_clamp_to_world()
 	move_and_slide()
 
-	if OS.get_name() not in ["Android", "iOS"]:
+	if not GameManager.is_mobile():
 		if Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
 			attack()
 
@@ -199,7 +199,7 @@ func _physics_process(delta: float) -> void:
 # ── Apuntado ──────────────────────────────────────────────────────
 
 func _update_aim() -> void:
-	if OS.get_name() not in ["Android", "iOS"]:
+	if not GameManager.is_mobile():
 		aim_angle = (get_global_mouse_position() - global_position).angle()
 	if is_instance_valid(_weapon_pivot):
 		_weapon_pivot.rotation = aim_angle
