@@ -61,6 +61,7 @@ func _ready() -> void:
 		const DAMAGE_NUM_SCRIPT = preload("res://core/managers/damage_number_manager.gd")
 		var dnm := DAMAGE_NUM_SCRIPT.new()
 		dnm.name = "DamageNumberManager"
+		dnm._camera = camera
 		call_deferred("add_child", dnm)
 		GameManager.damage_numbers = dnm
 	else:

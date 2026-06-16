@@ -48,14 +48,19 @@ func _process(delta: float) -> void:
 func spawn_damage(world_pos: Vector2, amount: float, color: Color = Color.WHITE) -> void:
 	if not _camera:
 		_camera = get_viewport().get_camera_2d()
-		if not _camera:
-			return
+	if not _camera:
+		return
 
 	var idx := _next
 	_next = (_next + 1) % POOL_SIZE
 
+	# Convertir posicion del mundo a coordenadas de pantalla (CanvasLayer)
+	var view_size : Vector2 = get_viewport().get_visible_rect().size
+	var cam_zoom  : Vector2 = _camera.zoom
+	var screen_pos: Vector2 = (world_pos - _camera.global_position) / cam_zoom + view_size * 0.5
+
 	_pool[idx].text    = str(roundi(amount))
-	_pool[idx].position = _camera.get_screen_position(world_pos)
+	_pool[idx].position = screen_pos
 	_pool[idx].add_theme_font_size_override("font_size", 14)
 	_pool[idx].add_theme_color_override("font_color", color)
 	_pool[idx].add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.7))
