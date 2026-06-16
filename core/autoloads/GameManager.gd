@@ -24,6 +24,7 @@ const ENEMY_SPEED = 80.0
 # ── Referencias a Managers (se asignan en gameplay.gd) ───────────────────
 var enemy_manager      : Node = null
 var projectile_manager : Node = null   # ProjectileManager DOD
+var damage_numbers     : Node = null   # DamageNumberManager
 
 # Señal global para cambio de escena
 signal scene_change_requested(scene_path: String, data: Dictionary)
