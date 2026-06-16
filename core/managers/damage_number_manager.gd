@@ -1,13 +1,13 @@
 extends CanvasLayer
 
 ## Sistema de numeros de danio flotantes. Usa draw_string() en un solo
-## Control con transform para scale, evitando get_string_size() por frame.
+## Control con transform para scale y sombra para legibilidad.
 class_name DamageNumberManager
 
 const POOL_SIZE   : int   = 60
-const FLOAT_SPEED : float = 80.0
-const FADE_TIME   : float = 0.55
-const FONT_SIZE   : int   = 14
+const FLOAT_SPEED : float = 55.0
+const FADE_TIME   : float = 1.5
+const FONT_SIZE   : int   = 20
 
 var _texts    : PackedStringArray  = []
 var _colors   : PackedColorArray   = []
@@ -61,12 +61,21 @@ func _on_draw() -> void:
 			continue
 		var t     := _timers[i] / FADE_TIME
 		var alpha := t * t
-		var scale := 1.0 + (1.0 - t) * 0.35
+		var scale := 1.0 + (1.0 - t) * 0.5
 		var col   := Color(_colors[i], alpha)
+		var shd   := Color(0.0, 0.0, 0.0, alpha * 0.6)
 		var pos   := _positions[i]
 		var half  := _sizes[i] * 0.5 * scale
+		var shadow_offset := Vector2(2.0, 2.0)
+
+		# Sombra
+		_canvas.draw_set_transform(pos + shadow_offset, 0.0, Vector2(scale, scale))
+		_canvas.draw_string(_font, -half, _texts[i], HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_SIZE, shd)
+
+		# Texto principal
 		_canvas.draw_set_transform(pos, 0.0, Vector2(scale, scale))
 		_canvas.draw_string(_font, -half, _texts[i], HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_SIZE, col)
+
 	_canvas.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 ## Spawnea un numero de danio en posicion global `world_pos`.
