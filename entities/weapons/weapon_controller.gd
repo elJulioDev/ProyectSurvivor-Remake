@@ -313,6 +313,15 @@ func _fire_laser(weapon: WeaponData) -> void:
 		if _closest_point_on_segment(start, laser_end_point, e_pos).distance_squared_to(e_pos) <= 400.0:
 			GameManager.enemy_manager.damage_enemy(idx, dmg, Vector2.ZERO, 0.0)
 
+	# ── Daño al boss activo (el boss no esta en EnemyManager) ────
+	var boss_node := get_tree().get_first_node_in_group("boss")
+	if is_instance_valid(boss_node) and boss_node.is_alive:
+		var boss : Boss = boss_node as Boss
+		var b_half : float = float((boss.data.size if boss.data else 36.0) * 0.5 + 20.0)
+		var b_pos  : Vector2 = boss.global_position
+		if _closest_point_on_segment(start, laser_end_point, b_pos).distance_squared_to(b_pos) <= b_half * b_half:
+			boss.take_damage(dmg, Vector2.ZERO, 0.0)
+
 # ════════════════════════════════════════════════════════════════════
 #  DRAW — miras, fogonazos, láser (sin cambios respecto al original)
 # ════════════════════════════════════════════════════════════════════
