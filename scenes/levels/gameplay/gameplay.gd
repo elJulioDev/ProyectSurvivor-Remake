@@ -57,6 +57,16 @@ func _ready() -> void:
 	GameManager.enemy_manager      = enemy_manager
 	GameManager.projectile_manager = projectile_manager
 
+	if not has_node("DamageNumberManager"):
+		const DAMAGE_NUM_SCRIPT = preload("res://core/managers/damage_number_manager.gd")
+		var dnm := DAMAGE_NUM_SCRIPT.new()
+		dnm.name = "DamageNumberManager"
+		dnm._camera = camera
+		call_deferred("add_child", dnm)
+		GameManager.damage_numbers = dnm
+	else:
+		GameManager.damage_numbers = $DamageNumberManager
+
 	spawn_manager.setup(enemy_manager)
 
 	enemy_manager.enemy_killed.connect(_on_enemy_killed)
