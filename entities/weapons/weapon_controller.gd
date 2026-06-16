@@ -314,10 +314,11 @@ func _fire_laser(weapon: WeaponData) -> void:
 			GameManager.enemy_manager.damage_enemy(idx, dmg, Vector2.ZERO, 0.0)
 
 	# ── Daño al boss activo (el boss no esta en EnemyManager) ────
-	var boss := get_tree().get_first_node_in_group("boss")
-	if is_instance_valid(boss) and boss.is_alive:
-		var b_half := float((boss.data.size if boss.data else 36.0) * 0.5 + 20.0)
-		var b_pos  := boss.global_position
+	var boss_node := get_tree().get_first_node_in_group("boss")
+	if is_instance_valid(boss_node) and boss_node.is_alive:
+		var boss : Boss = boss_node as Boss
+		var b_half : float = float((boss.data.size if boss.data else 36.0) * 0.5 + 20.0)
+		var b_pos  : Vector2 = boss.global_position
 		if _closest_point_on_segment(start, laser_end_point, b_pos).distance_squared_to(b_pos) <= b_half * b_half:
 			boss.take_damage(dmg, Vector2.ZERO, 0.0)
 
