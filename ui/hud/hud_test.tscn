@@ -1,0 +1,177 @@
+[gd_scene format=3 uid="uid://bkauqgoxfbrd8"]
+
+[ext_resource type="Texture2D" uid="uid://gyxjbx8xm4nc" path="res://assets/textures/marco.png" id="2_panel"]
+[ext_resource type="Texture2D" uid="uid://4niyxgylrumt" path="res://assets/textures/spr_mana_bar.png" id="3_4gew8"]
+[ext_resource type="FontFile" uid="uid://ckth3dthw5hj" path="res://assets/fonts/PressStart2P.ttf" id="3_font"]
+[ext_resource type="Texture2D" uid="uid://c4dh1dwyjv6si" path="res://assets/textures/icons/Icons_RPG.png" id="5_8nub5"]
+[ext_resource type="FontFile" uid="uid://d3suj1wjrl20a" path="res://assets/fonts/dpcomic.ttf" id="5_pfxqv"]
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_1m5fi"]
+atlas = ExtResource("5_8nub5")
+region = Rect2(0, 160, 15, 15)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_v2teb"]
+atlas = ExtResource("5_8nub5")
+region = Rect2(50, 130, 11, 12)
+
+[node name="HUD" type="CanvasLayer" unique_id=1508713199]
+
+[node name="UI_Root" type="Control" parent="." unique_id=810160026]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="MainLayout" type="MarginContainer" parent="UI_Root" unique_id=1220163198]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme_override_constants/margin_left = 5
+theme_override_constants/margin_top = 5
+theme_override_constants/margin_right = 5
+theme_override_constants/margin_bottom = 5
+
+[node name="MainVBox" type="VBoxContainer" parent="UI_Root/MainLayout" unique_id=1220163199]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 4
+
+[node name="Panel_XP" type="NinePatchRect" parent="UI_Root/MainLayout/MainVBox" unique_id=770322698]
+custom_minimum_size = Vector2(0, 36)
+layout_mode = 2
+size_flags_horizontal = 3
+texture = ExtResource("2_panel")
+patch_margin_left = 24
+patch_margin_top = 11
+patch_margin_right = 24
+patch_margin_bottom = 24
+axis_stretch_horizontal = 1
+axis_stretch_vertical = 1
+
+[node name="MarginContainer" type="MarginContainer" parent="UI_Root/MainLayout/MainVBox/Panel_XP" unique_id=1130155395]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme_override_constants/margin_left = 12
+theme_override_constants/margin_top = 5
+theme_override_constants/margin_right = 12
+theme_override_constants/margin_bottom = 5
+
+[node name="HBoxContainer" type="HBoxContainer" parent="UI_Root/MainLayout/MainVBox/Panel_XP/MarginContainer" unique_id=1246574540]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 12
+
+[node name="LabelXP" type="Label" parent="UI_Root/MainLayout/MainVBox/Panel_XP/MarginContainer/HBoxContainer" unique_id=1942406145]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.922, 0.922, 0.961, 1)
+theme_override_fonts/font = ExtResource("3_font")
+theme_override_font_sizes/font_size = 12
+text = "XP"
+vertical_alignment = 1
+
+[node name="BarraXP" type="TextureProgressBar" parent="UI_Root/MainLayout/MainVBox/Panel_XP/MarginContainer/HBoxContainer" unique_id=2146151790]
+custom_minimum_size = Vector2(0, 14)
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 4
+value = 63.0
+nine_patch_stretch = true
+texture_under = ExtResource("3_4gew8")
+texture_progress = ExtResource("3_4gew8")
+tint_under = Color(0, 0, 0, 1)
+
+[node name="LabelLevel" type="Label" parent="UI_Root/MainLayout/MainVBox/Panel_XP/MarginContainer/HBoxContainer" unique_id=395326740]
+custom_minimum_size = Vector2(120, 0)
+layout_mode = 2
+theme_override_colors/font_color = Color(0.922, 0.922, 0.961, 1)
+theme_override_fonts/font = ExtResource("3_font")
+theme_override_font_sizes/font_size = 14
+text = "LVL 13"
+horizontal_alignment = 2
+vertical_alignment = 1
+clip_text = true
+
+[node name="LabelTimer" type="Label" parent="UI_Root" unique_id=1107055380]
+layout_mode = 1
+anchors_preset = 10
+anchor_right = 1.0
+offset_top = 46.0
+offset_bottom = 88.0
+grow_horizontal = 2
+theme_override_colors/font_color = Color(0.922, 0.922, 0.961, 1)
+theme_override_colors/font_shadow_color = Color(0, 0, 0, 1)
+theme_override_fonts/font = ExtResource("5_pfxqv")
+theme_override_font_sizes/font_size = 30
+text = "00:10"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="StatsRight" type="VBoxContainer" parent="UI_Root" unique_id=1107055381]
+layout_mode = 1
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -220.0
+offset_top = 46.0
+offset_right = -16.0
+offset_bottom = 130.0
+grow_horizontal = 0
+mouse_filter = 2
+theme_override_constants/separation = 8
+
+[node name="ScoreRow" type="HBoxContainer" parent="UI_Root/StatsRight" unique_id=1107055384]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 8
+alignment = 2
+
+[node name="LabelScoreValue" type="Label" parent="UI_Root/StatsRight/ScoreRow" unique_id=1107055386]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 0.784, 0.157, 1)
+theme_override_colors/font_shadow_color = Color(0, 0, 0, 1)
+theme_override_fonts/font = ExtResource("3_font")
+theme_override_font_sizes/font_size = 18
+text = "40.000.000"
+vertical_alignment = 1
+
+[node name="IconScore" type="TextureRect" parent="UI_Root/StatsRight/ScoreRow" unique_id=1107055385]
+custom_minimum_size = Vector2(20, 20)
+layout_mode = 2
+size_flags_vertical = 4
+texture = SubResource("AtlasTexture_1m5fi")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="KillsRow" type="HBoxContainer" parent="UI_Root/StatsRight" unique_id=1107055388]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 8
+alignment = 2
+
+[node name="LabelKillsValue" type="Label" parent="UI_Root/StatsRight/KillsRow" unique_id=1107055390]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.906, 0.298, 0.235, 1)
+theme_override_colors/font_shadow_color = Color(0, 0, 0, 1)
+theme_override_fonts/font = ExtResource("3_font")
+theme_override_font_sizes/font_size = 14
+text = "102.044"
+vertical_alignment = 1
+
+[node name="IconKills" type="TextureRect" parent="UI_Root/StatsRight/KillsRow" unique_id=1107055389]
+custom_minimum_size = Vector2(20, 20)
+layout_mode = 2
+size_flags_vertical = 4
+texture = SubResource("AtlasTexture_v2teb")
+expand_mode = 1
