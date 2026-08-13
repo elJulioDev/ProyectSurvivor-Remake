@@ -250,7 +250,45 @@ func _update_visuals() -> void:
 		if _aura_visual.visible:
 			_aura_visual.set_state(aura_radius, aura_knockback, _aura_pulse_timer, aura_knockback_interval)
 
+	# Solicitar redibujado para barras de vida/dash
+	queue_redraw()
+
 # ── Timers ────────────────────────────────────────────────────────
+
+func _draw() -> void:
+	if not is_alive:
+		return
+
+	# ── Barra de vida (debajo del personaje) ─────────────────────
+	var bar_w   := 40.0
+	var bar_h   := 4.0
+	var bar_y   := float(PLAYER_SIZE) * 0.5 + 6.0
+	var hp_pct  := clampf(health / maxf(max_health, 1.0), 0.0, 1.0)
+
+	# Fondo
+	draw_rect(Rect2(-bar_w * 0.5, bar_y, bar_w, bar_h), Color(0.05, 0.05, 0.05))
+	# Relleno
+	if hp_pct > 0.0:
+		var hp_col := Color(0.18, 0.80, 0.44) if hp_pct > 0.5 \
+			else Color(0.94, 0.77, 0.06) if hp_pct > 0.25 \
+			else Color(0.90, 0.30, 0.24)
+		draw_rect(Rect2(-bar_w * 0.5, bar_y, bar_w * hp_pct, bar_h), hp_col)
+	# Borde
+	draw_rect(Rect2(-bar_w * 0.5, bar_y, bar_w, bar_h), Color(0.15, 0.15, 0.20), false, 1.0)
+
+	# ── Barra de dash (debajo de la vida) ────────────────────────
+	if dash_unlocked:
+		var dash_w  := 40.0
+		var dash_h  := 3.0
+		var dash_y  := bar_y + bar_h + 3.0
+		var dash_pct := get_dash_cooldown_fraction()
+
+		draw_rect(Rect2(-dash_w * 0.5, dash_y, dash_w, dash_h), Color(0.05, 0.05, 0.05))
+		if dash_pct > 0.0:
+			var dc := Color(0.0, 0.82, 1.0) if dash_pct >= 0.99 \
+				else Color(0.12, 0.35, 0.51)
+			draw_rect(Rect2(-dash_w * 0.5, dash_y, dash_w * dash_pct, dash_h), dc)
+		draw_rect(Rect2(-dash_w * 0.5, dash_y, dash_w, dash_h), Color(0.15, 0.15, 0.20), false, 1.0)
 
 func _update_timers(delta: float) -> void:
 	if _dash_cd_timer > 0.0:

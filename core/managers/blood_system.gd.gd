@@ -30,10 +30,10 @@ class_name BloodSystem
 @export var evict_margin : int = 3       ## Chunks fuera de vista antes de evicción
 
 # ── Paleta ────────────────────────────────────────────────────────
-const C_BLOOD  := Color(0.63, 0.0, 0.0, 1.0)
-const C_DARK   := Color(0.31, 0.0, 0.0, 1.0)
-const C_PINK   := Color(0.71, 0.35, 0.39, 1.0)
-const C_BRIGHT := Color(0.78, 0.08, 0.08, 1.0)
+const C_BLOOD  := Color(0.38, 0.0, 0.0, 1.0)
+const C_DARK   := Color(0.18, 0.0, 0.0, 1.0)
+const C_PINK   := Color(0.52, 0.22, 0.25, 1.0)
+const C_BRIGHT := Color(0.55, 0.06, 0.06, 1.0)
 const PALETTE  : Array[Color] = [C_BLOOD, C_DARK, C_PINK, C_BRIGHT]
 
 # ── Flags de partícula (bitfield) ─────────────────────────────────
@@ -105,7 +105,7 @@ func _init_pool() -> void:
 func _init_stamps() -> void:
 	## Genera imágenes de stamp para cada combo color × tamaño.
 	## Se usan con Image.blend_rect() para pintar sangre en los chunks.
-	var sizes := [2, 3, 4, 6, 8, 10, 14, 18, 24]
+	var sizes := [3, 4, 6, 8, 10, 14, 18, 24, 32]
 	for ci in PALETTE.size():
 		var c := PALETTE[ci]
 		for s in sizes:
@@ -118,7 +118,7 @@ func _init_stamps() -> void:
 
 func _get_stamp(color_idx: int, px_size: int) -> Image:
 	## Devuelve el stamp más cercano al tamaño pedido.
-	var buckets := [2, 3, 4, 6, 8, 10, 14, 18, 24]
+	var buckets := [3, 4, 6, 8, 10, 14, 18, 24, 32]
 	var best := 4
 	var best_d := 999
 	for b in buckets:
@@ -174,7 +174,7 @@ func create_blood_splatter(pos: Vector2, direction: Vector2 = Vector2.ZERO,
 
 	var actual : int
 	if quality == 2:
-		actual = count + int(dmg_ratio * 6.0)
+		actual = count + int(dmg_ratio * 8.0)
 	else:
 		actual = maxi(1, int(count / 2.0))
 
@@ -194,7 +194,7 @@ func create_blood_splatter(pos: Vector2, direction: Vector2 = Vector2.ZERO,
 		var vel := Vector2(cos(angle), sin(angle)) * speed
 		# Colores: BLOOD(0), BRIGHT(3), DARK(1)
 		var ci: int = [0, 3, 1][randi() % 3]
-		var sz := randi_range(2, 5)
+		var sz := randi_range(3, 7)
 		_spawn(pos.x, pos.y, vel.x, vel.y, ci, sz,
 			   randf_range(0.7, 1.3), false, true)
 
@@ -207,9 +207,9 @@ func create_viscera_explosion(pos: Vector2, size_factor: float = 1.0) -> void:
 	var pool_spawn  : bool
 
 	match quality:
-		2:  mist_count = 22; chunk_count = 9; pool_spawn = true
-		1:  mist_count = 6;  chunk_count = 2; pool_spawn = true
-		_:  mist_count = 2;  chunk_count = 0; pool_spawn = false
+		2:  mist_count = 30; chunk_count = 14; pool_spawn = true
+		1:  mist_count = 10; chunk_count = 4; pool_spawn = true
+		_:  mist_count = 3;  chunk_count = 0; pool_spawn = false
 
 	# Charco de sangre en el suelo
 	if pool_spawn:
@@ -223,7 +223,7 @@ func create_viscera_explosion(pos: Vector2, size_factor: float = 1.0) -> void:
 		var speed := randf_range(3.0, 10.0) * sf
 		var ci := 0 if randf() < 0.5 else 3   # BLOOD o BRIGHT
 		_spawn(pos.x, pos.y, cos(angle) * speed, sin(angle) * speed,
-			   ci, randi_range(3, 6), randf_range(0.35, 0.75), false, true)
+			   ci, randi_range(4, 8), randf_range(0.35, 0.75), false, true)
 
 	# Trozos de carne (F_CHUNK → no se bakean, persisten, cuadrados rosados)
 	for _j in chunk_count:
@@ -231,7 +231,7 @@ func create_viscera_explosion(pos: Vector2, size_factor: float = 1.0) -> void:
 		var speed := randf_range(5.0, 12.0) * sf
 		var ci := 1 if randf() < 0.5 else 2   # DARK o PINK
 		_spawn(pos.x, pos.y, cos(angle) * speed, sin(angle) * speed,
-			   ci, randi_range(4, int(9 * sf)), randf_range(1.6, 5.0), true, false)
+			   ci, randi_range(5, int(12 * sf)), randf_range(1.6, 5.0), true, false)
 
 
 ## Mancha de herida inmediata en el suelo al recibir daño significativo.
@@ -241,9 +241,9 @@ func create_wound_stain(pos: Vector2, dmg_ratio: float = 0.5) -> void:
 
 	var blobs := 1 + int(dmg_ratio * 3.0)
 	for _j in blobs:
-		var ox := randf_range(-8.0, 8.0)
-		var oy := randf_range(-8.0, 8.0)
-		var sz := randi_range(3, int(8 + dmg_ratio * 10))
+		var ox := randf_range(-10.0, 10.0)
+		var oy := randf_range(-10.0, 10.0)
+		var sz := randi_range(4, int(10 + dmg_ratio * 14))
 		# Spawn con velocidad 0 → se bakea inmediatamente en el próximo frame
 		_spawn(pos.x + ox, pos.y + oy, 0.0, 0.0,
 			   1, sz, 0.5, false, true)
@@ -254,17 +254,17 @@ func create_blood_drip(pos: Vector2, intensity: float) -> void:
 	if quality == 0:
 		return
 
-	var base_size := mini(10, 2 + int(intensity * 0.3))
+	var base_size := mini(12, 3 + int(intensity * 0.35))
 	var drops := 1
-	if intensity > 15.0:
+	if intensity > 12.0:
 		drops = randi_range(1, 2)
 
 	for _j in drops:
-		var sx := pos.x + randf_range(-4.0, 4.0)
-		var sy := pos.y + randf_range(-4.0, 4.0)
+		var sx := pos.x + randf_range(-5.0, 5.0)
+		var sy := pos.y + randf_range(-5.0, 5.0)
 		var ci := 1 if intensity > 10.0 else randi_range(0, 1)
 		_spawn(sx, sy, randf_range(-1.0, 1.0), randf_range(-1.0, 1.0),
-			   ci, randi_range(base_size, base_size + 3),
+			   ci, randi_range(base_size, base_size + 4),
 			   randf_range(1.0, 2.0), false, true)
 
 
@@ -289,13 +289,13 @@ func _create_blood_pool(pos: Vector2, size_factor: float = 1.0) -> void:
 
 	var sf := clampf(size_factor, 0.5, 2.5)
 	for _j in blobs:
-		var od := randf_range(0.0, 18.0 * sf) if blobs > 1 else 0.0
+		var od := randf_range(0.0, 22.0 * sf) if blobs > 1 else 0.0
 		var oa := randf() * TAU
 		var bsize : int
 		if quality == 2:
-			bsize = randi_range(int(10 * sf), int(24 * sf))
+			bsize = randi_range(int(14 * sf), int(30 * sf))
 		else:
-			bsize = randi_range(6, 12)
+			bsize = randi_range(8, 16)
 		_spawn(pos.x + cos(oa) * od, pos.y + sin(oa) * od,
 			   0.0, 0.0, 1, bsize, randf_range(1.0, 2.0), false, true)
 

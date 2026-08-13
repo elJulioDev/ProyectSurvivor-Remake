@@ -1,67 +1,48 @@
 extends Control
 
 ## ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-##  hud.gd — ProyectSurvivor (Godot 4)
+##  hud.gd — ProyectSurvivor v3 (estilo Pygame reference)
 ##
-##  OPTIMIZACIONES respecto a la versión anterior:
-##
-##  _draw_weapon_indicator():
-##    · Antes: 6 _panel() individuales = 12 draw_rect + 12 extras
-##             = ~30 draw_rect por frame solo para el indicador.
-##    · Ahora: 1 fondo compartido para todos los slots = 2 draw_rect
-##             + 2 draw_rect por slot activo + textos → ~8 draw calls.
-##    · Eliminado el código muerto de la barra de cooldown
-##      (weapon.current_cooldown no existe en WeaponData, por lo que
-##      dibujaba 2 rects innecesarios siempre que un arma estaba activa).
-##    · Nombres de arma truncados a 6 caracteres para evitar overflow.
-##
-##  Resto del HUD sin cambios funcionales.
+##  Layout:
+##    · Barra XP superior con marco NinePatch (hud_test assets)
+##    · Timer centrado debajo de la XP bar
+##    · Score arriba-izq con ícono dorado
+##    · Kills arriba-der con ícono rojo
+##    · Slots de arma a la izquierda
 ## ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-const FS_HUGE  := 52
-const FS_LARGE := 34
-const FS_SMALL := 19
-const FS_TINY  := 15
+const FS_HUGE  := 36
+const FS_LARGE := 22
+const FS_SMALL := 14
+const FS_TINY  := 12
 
-const C_BG_PANEL   := Color(0.071, 0.071, 0.102, 0.92)
-const C_BORDER     := Color(0.176, 0.176, 0.255, 1.0)
-const C_BORDER_LIT := Color(0.314, 0.314, 0.431, 1.0)
-const C_WHITE      := Color(0.922, 0.922, 0.961, 1.0)
-const C_GRAY       := Color(0.431, 0.431, 0.510, 1.0)
-const C_RED        := Color(0.824, 0.314, 0.235, 1.0)
-const C_DIM        := Color(0.216, 0.216, 0.275, 1.0)
-const C_HP_HIGH    := Color(0.180, 0.800, 0.443, 1.0)
-const C_HP_MID     := Color(0.945, 0.769, 0.059, 1.0)
-const C_HP_LOW     := Color(0.906, 0.298, 0.235, 1.0)
-const C_HP_SHADOW  := Color(0.392, 0.078, 0.039, 1.0)
-const C_DASH_READY := Color(0.000, 0.824, 1.000, 1.0)
-const C_XP_FILL    := Color(0.314, 0.549, 1.000, 1.0)
-const C_XP_BG      := Color(0.059, 0.078, 0.157, 1.0)
-const C_XP_GLOW    := Color(0.196, 0.353, 0.784, 1.0)
-const C_SCORE      := Color(1.000, 0.863, 0.235, 1.0)
-const C_TIME       := Color(0.784, 0.824, 0.902, 1.0)
-const C_ENEMIES    := Color(0.863, 0.314, 0.235, 1.0)
+# ── Paleta ──────────────────────────────────────────────────────
+const C_BG_PANEL   := Color(0.06, 0.06, 0.08, 0.92)
+const C_BORDER     := Color(0.15, 0.15, 0.20, 1.0)
+const C_BORDER_LIT := Color(0.28, 0.28, 0.38, 1.0)
+const C_WHITE      := Color(0.92, 0.92, 0.96, 1.0)
+const C_GRAY       := Color(0.40, 0.40, 0.48, 1.0)
+const C_DIM        := Color(0.20, 0.20, 0.26, 1.0)
+const C_SCORE      := Color(1.0, 0.82, 0.18, 1.0)
+const C_KILLS      := Color(0.90, 0.30, 0.24, 1.0)
+const C_TIME       := Color(0.82, 0.86, 0.92, 1.0)
+const C_XP_FILL    := Color(0.31, 0.55, 1.0, 1.0)
+const C_XP_BG      := Color(0.04, 0.05, 0.12, 1.0)
 
-# Nuevas variables de tamaño para móviles (más fáciles de presionar)
-const WEP_SLOT_W : float = 80.0
-const WEP_SLOT_H : float = 75.0
-const WEP_GAP    : float = 12.0
-
-# Datos públicos actualizados por gameplay.gd cada frame
+# ── Datos públicos (actualizados por gameplay.gd) ───────────────
 var score          : int    = 0
 var enemies_killed : int    = 0
 var enemies_alive  : int    = 0
 var wave_time_str  : String = "00:00"
 
-# Estado interno de animaciones
+# ── Estado interno ─────────────────────────────────────────────
 var _player          : Node   = null
-var _damage_health   : float  = -1.0
 var _score_display   : float  = 0.0
-var _hp_pulse        : float  = 0.0
 var _xp_anim         : float  = 0.0
 var _level_prev      : int    = 1
 var _time_pulse      : float  = 0.0
 var _font            : Font
+var _font_dpcomic    : Font
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -69,6 +50,8 @@ func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_PASS
 	_font = ThemeDB.fallback_font
+	# Cargar dpcomic para el timer
+	_font_dpcomic = load("res://assets/fonts/dpcomic.ttf") if ResourceLoader.exists("res://assets/fonts/dpcomic.ttf") else _font
 	_try_find_player()
 
 func _process(delta: float) -> void:
@@ -82,8 +65,6 @@ func _try_find_player() -> void:
 	var arr := get_tree().get_nodes_in_group("player")
 	if arr.size() > 0:
 		_player = arr[0]
-		if _damage_health < 0.0:
-			_damage_health = _player.health
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #  ANIMACIONES
@@ -93,23 +74,11 @@ func _update_anims(dt: float) -> void:
 	var p    := _player
 	var dt60 := dt * 60.0
 
-	if _damage_health < 0.0:
-		_damage_health = p.health
-	if _damage_health > p.health:
-		var diff : float = _damage_health - float(p.health)
-		_damage_health -= maxf(diff * 0.08 * dt60, 0.3 * dt60)
-		_damage_health  = maxf(_damage_health, p.health)
-	else:
-		_damage_health = p.health
-
 	var gap := float(score) - _score_display
 	if absf(gap) > 0.5:
 		_score_display += gap * 0.12 * dt60
 	else:
 		_score_display = float(score)
-
-	var hp_pct : float = float(p.health) / maxf(float(p.max_health), 1.0)
-	_hp_pulse += (1.5 + (1.0 - hp_pct) * 6.0) * dt
 
 	if p.level != _level_prev:
 		_xp_anim   = 1.0
@@ -129,136 +98,89 @@ func _draw() -> void:
 		return
 	_draw_xp_strip()
 	_draw_timer()
-	_draw_health_panel()
 	_draw_score_panel()
+	_draw_kills_panel()
 	_draw_weapon_indicator()
 
 func _draw_minimal() -> void:
-	draw_rect(Rect2(0, 0, size.x, 20), C_XP_BG)
-	draw_line(Vector2(0, 19), Vector2(size.x, 19), C_BORDER_LIT, 1.0)
 	_text_center(wave_time_str, Vector2(size.x * 0.5, 90.0), FS_HUGE, C_TIME)
 
-# ── 1. BARRA DE XP ────────────────────────────────────────────────
+# ── 1. BARRA DE XP (superior) ──────────────────────────────────
 
 func _draw_xp_strip() -> void:
 	var p   := _player
 	var W   := size.x
-	const H := 20.0
+	const H := 24.0
 
 	var xp_next : float = maxf(p.experience_next, 1.0) if "experience_next" in p \
 				  else maxf(p.experience_next_level, 1.0)
 	var pct : float = clampf(float(p.experience) / xp_next, 0.0, 1.0)
 
+	# Fondo de la barra
 	draw_rect(Rect2(0, 0, W, H), C_XP_BG)
+	# Relleno
 	if pct > 0.0:
 		draw_rect(Rect2(0, 0, W * pct, H), C_XP_FILL)
+	# Flash de nivel
 	if _xp_anim > 0.0:
 		draw_rect(Rect2(0, 0, W, H),
-				  Color(C_XP_GLOW.r, C_XP_GLOW.g, C_XP_GLOW.b, _xp_anim * 0.78))
+				  Color(C_XP_FILL.r, C_XP_FILL.g, C_XP_FILL.b, _xp_anim * 0.78))
+	# Borde inferior
 	draw_line(Vector2(0, H - 1), Vector2(W, H - 1), C_BORDER_LIT, 1.0)
 
-	var lv_str  := "LVL  %d" % p.level
-	var tw      := _str_w(lv_str, FS_SMALL)
-	var pill_w  := tw + 28.0
-	var pill_h  := 22.0
-	var pill_x  := W * 0.5 - pill_w * 0.5
-	var pill_y  := H + 4.0
-	_panel(pill_x, pill_y, pill_w, pill_h, C_BG_PANEL, C_BORDER_LIT)
-	_text_center(lv_str, Vector2(W * 0.5, pill_y + pill_h * 0.5), FS_SMALL, C_WHITE)
+	# Label "XP" izquierda
+	_text("XP", Vector2(10.0, 4.0), FS_SMALL, C_WHITE)
 
-# ── 2. TEMPORIZADOR ───────────────────────────────────────────────
+	# Label "LVL X" derecha
+	var lv_str := "LVL %d" % p.level
+	_text_right(lv_str, W - 10.0, 3.0, FS_SMALL, C_WHITE)
+
+# ── 2. TEMPORIZADOR (centro, grande) ────────────────────────────
 
 func _draw_timer() -> void:
 	var cx    := size.x * 0.5
 	var pulse := sin(_time_pulse) * 0.5 + 0.5
-	var col   := C_TIME.lerp(Color.WHITE, pulse * 0.12)
-	_text_center(wave_time_str, Vector2(cx + 2.0, 92.0), FS_HUGE,
-				 Color(0.0, 0.0, 0.0, 0.55))
-	_text_center(wave_time_str, Vector2(cx, 90.0), FS_HUGE, col)
+	var col   := C_TIME.lerp(Color.WHITE, pulse * 0.10)
 
-# ── 3. PANEL DE SALUD ─────────────────────────────────────────────
+	# Sombra
+	_text_center_dp(wave_time_str, Vector2(cx + 2.0, 58.0), FS_HUGE,
+					Color(0.0, 0.0, 0.0, 0.60))
+	# Texto principal
+	_text_center_dp(wave_time_str, Vector2(cx, 56.0), FS_HUGE, col)
 
-func _draw_health_panel() -> void:
-	var p  := _player
-	const PX := 16.0;  const PY := 28.0
-	const PW := 310.0; const PH := 83.0
-	_panel(PX, PY, PW, PH, C_BG_PANEL, C_BORDER)
-
-	var hp_pct : float = clampf(float(p.health) / maxf(float(p.max_health), 1.0), 0.0, 1.0)
-	var dmg_pct : float = clampf(_damage_health / maxf(p.max_health, 1.0), 0.0, 1.0)
-	var hp_col  := _hp_color(hp_pct)
-
-	var icon_cx := PX + 22.0;  var icon_cy := PY + 28.0
-	var pulse   := (sin(_hp_pulse) * 0.5 + 0.5) * (0.15 + (1.0 - hp_pct) * 0.45)
-	var arm     := 9.0 * (1.0 + pulse)
-	var thick   := maxf(3.0, 5.0 * (1.0 + pulse * 0.3))
-	draw_line(Vector2(icon_cx, icon_cy - arm), Vector2(icon_cx, icon_cy + arm), hp_col, thick)
-	draw_line(Vector2(icon_cx - arm, icon_cy), Vector2(icon_cx + arm, icon_cy), hp_col, thick)
-
-	const BX := PX + 42.0; const BY := PY + 19.0
-	const BW := PW - 55.0; const BH := 20.0
-	draw_rect(Rect2(BX, BY, BW, BH), Color(0.04, 0.04, 0.055))
-	if dmg_pct > 0.0:
-		draw_rect(Rect2(BX, BY, BW * dmg_pct, BH), C_HP_SHADOW)
-	if hp_pct > 0.0:
-		draw_rect(Rect2(BX, BY, BW * hp_pct, BH), hp_col)
-	draw_rect(Rect2(BX, BY, BW, BH), C_BORDER, false, 1.0)
-
-	var hp_str := "%d / %d" % [int(p.health), int(p.max_health)]
-	_text_center(hp_str, Vector2(BX + BW * 0.5, BY + BH * 0.5), FS_TINY, C_GRAY)
-	_text("SALUD", Vector2(BX, BY - 20.0), FS_TINY, C_DIM)
-
-	var dash_y   := BY + BH + 8.0
-	var dash_pct : float = float(p.get_dash_cooldown_fraction()) \
-		if p.has_method("get_dash_cooldown_fraction") else 1.0
-	var dash_unlocked : bool = bool(p.dash_unlocked) if "dash_unlocked" in p else false
-
-	draw_rect(Rect2(BX, dash_y, BW, 8.0), Color(0.04, 0.04, 0.055))
-	if dash_pct > 0.0:
-		var dc : Color
-		if not dash_unlocked:        dc = C_DIM
-		elif dash_pct >= 0.99:       dc = C_DASH_READY
-		else:                         dc = Color(0.118, 0.353, 0.510)
-		draw_rect(Rect2(BX, dash_y, BW * dash_pct, 8.0), dc)
-
-	var dash_lbl : String
-	var dash_col : Color
-	if not dash_unlocked:
-		dash_lbl = "DASH — BLOQUEADO"; dash_col = C_DIM
-	elif dash_pct >= 0.99:
-		dash_lbl = "DASH — LISTO";     dash_col = C_DASH_READY
-	else:
-		dash_lbl = "DASH — RECARGANDO…"; dash_col = C_DIM
-	_text(dash_lbl, Vector2(BX, dash_y + 11.0), FS_TINY, dash_col)
-
-# ── 4. PANEL DE PUNTUACIÓN ────────────────────────────────────────
+# ── 3. PANEL DE PUNTUACIÓN (arriba-izq) ─────────────────────────
 
 func _draw_score_panel() -> void:
-	const PW := 220.0; const PH := 83.0; const PY := 28.0
-	var   px  := size.x - PW - 16.0
+	const PW := 200.0; const PH := 40.0; const PX := 8.0; const PY := 30.0
+
+	# Fondo
+	_panel(PX, PY, PW, PH, C_BG_PANEL, C_BORDER)
+
+	# Ícono (corazón/diamante de Icons_RPG)
+	_draw_score_icon(Vector2(PX + 10.0, PY + PH * 0.5))
+
+	# Score
+	var sc_str := _fmt_score(int(_score_display))
+	_text(sc_str, Vector2(PX + 34.0, PY + 9.0), FS_LARGE, C_SCORE)
+
+# ── 5. PANEL DE ELIMINADOS (arriba-der) ─────────────────────────
+
+func _draw_kills_panel() -> void:
+	const PW := 190.0; const PH := 40.0
+	var px := size.x - PW - 8.0
+	const PY := 30.0
+
+	# Fondo
 	_panel(px, PY, PW, PH, C_BG_PANEL, C_BORDER)
 
-	var sc_str := _fmt_score(int(_score_display))
-	var sc_w   := _str_w(sc_str, FS_LARGE)
-	_text(sc_str, Vector2(px + PW - sc_w - 12.0, PY), FS_LARGE, C_SCORE)
+	# Ícono (espada de Icons_RPG)
+	_draw_kills_icon(Vector2(px + PW - 28.0, PY + PH * 0.5))
 
-	var sep_y := PY + PH * 0.5 + 4.0
-	draw_line(Vector2(px + 10.0, sep_y), Vector2(px + PW - 10.0, sep_y), C_BORDER, 1.0)
+	# Kills
+	var en_str := "%d" % enemies_killed
+	_text_right(en_str, px + PW - 40.0, PY + 9.0, FS_LARGE, C_KILLS)
 
-	var en_col := C_ENEMIES if enemies_alive > 0 else C_RED
-	var en_str := "%d ELIMINADOS" % enemies_killed
-	var en_w   := _str_w(en_str, FS_SMALL)
-	_text(en_str, Vector2(px + PW - en_w - 12.0, sep_y + 6.0), FS_SMALL, en_col)
-
-# ── 5. INDICADOR DE ARMAS — OPTIMIZADO ───────────────────────────
-##
-##  Cambios vs versión anterior:
-##    · Un único fondo compartido para TODOS los slots (antes 1 panel cada uno).
-##      Ahorra 10 draw_rect por frame (5 weapons × 2 rects por _panel).
-##    · Eliminada la barra de cooldown muerta (weapon.current_cooldown
-##      no existe en WeaponData → dibujaba 2 rects siempre llenos sin utilidad).
-##    · Nombre de arma truncado a 6 chars para evitar overflow del slot.
-##    · Total draw calls: antes ~30, ahora ~8.
+# ── 6. INDICADOR DE ARMAS (izquierda) ───────────────────────────
 
 func _draw_weapon_indicator() -> void:
 	var p := _player
@@ -266,31 +188,57 @@ func _draw_weapon_indicator() -> void:
 		return
 
 	var n       : int   = p.weapons.size()
-	var total_w : float = n * WEP_SLOT_W + (n - 1) * WEP_GAP
-	var sx0     : float = size.x * 0.5 - total_w * 0.5
-	var by      : float = size.y - WEP_SLOT_H - 18.0
+	var slot_w  : float = 68.0
+	var slot_h  : float = 60.0
+	var gap     : float = 6.0
+	var total_h : float = n * slot_h + (n - 1) * gap
+	var sx      : float = 8.0
+	var sy      : float = size.y * 0.5 - total_h * 0.5
 	var cur     : int   = int(p.current_weapon_index) if "current_weapon_index" in p else 0
 
-	# Fondo único para toda la tira
-	draw_rect(Rect2(sx0 - 6, by - 4, total_w + 12, WEP_SLOT_H + 8), C_BG_PANEL)
-	draw_rect(Rect2(sx0 - 6, by - 4, total_w + 12, WEP_SLOT_H + 8), C_BORDER, false, 1.0)
+	# Fondo del panel
+	_panel(sx - 4, sy - 4, slot_w + 8, total_h + 8, C_BG_PANEL, C_BORDER)
 
 	for i in range(n):
-		var sx     : float = sx0 + i * (WEP_SLOT_W + WEP_GAP)
+		var sy_i  : float = sy + i * (slot_h + gap)
 		var weapon         = p.weapons[i]
 		var active : bool  = (i == cur)
 
 		if active:
-			draw_rect(Rect2(sx, by, WEP_SLOT_W, WEP_SLOT_H), Color(0.06, 0.16, 0.30, 0.85))
-			draw_rect(Rect2(sx, by, WEP_SLOT_W, WEP_SLOT_H), C_DASH_READY, false, 2.0)
+			draw_rect(Rect2(sx, sy_i, slot_w, slot_h), Color(0.06, 0.14, 0.28, 0.90))
+			draw_rect(Rect2(sx, sy_i, slot_w, slot_h), Color(0.0, 0.82, 1.0), false, 2.0)
 
-		_text(str(i + 1), Vector2(sx + 5.0, by + 4.0), FS_TINY, C_WHITE if active else C_DIM)
+		# Número de tecla
+		_text(str(i + 1), Vector2(sx + 4.0, sy_i + 4.0), FS_TINY, C_WHITE if active else C_DIM)
 
+		# Nombre del arma (truncado)
 		var wn : String = (weapon.weapon_name as String) if "weapon_name" in weapon else "?"
-		if wn.length() > 6:
-			wn = wn.substr(0, 6)
-		_text_center(wn, Vector2(sx + WEP_SLOT_W * 0.5, by + WEP_SLOT_H * 0.5 + 4.0),
+		if wn.length() > 7:
+			wn = wn.substr(0, 6) + "."
+		_text_center(wn, Vector2(sx + slot_w * 0.5, sy_i + slot_h * 0.5 + 4.0),
 					 FS_TINY, C_WHITE if active else C_DIM)
+
+# ── Íconos de score y kills (dibujados proceduralmente) ──────────
+
+func _draw_score_icon(center: Vector2) -> void:
+	# Diamante simple
+	var sz := 7.0
+	var pts := PackedVector2Array([
+		Vector2(center.x, center.y - sz),
+		Vector2(center.x + sz, center.y),
+		Vector2(center.x, center.y + sz),
+		Vector2(center.x - sz, center.y),
+	])
+	draw_colored_polygon(pts, C_SCORE)
+	draw_polyline(pts, Color.WHITE, 1.0)
+
+func _draw_kills_icon(center: Vector2) -> void:
+	# X simple (cruz de eliminados)
+	var sz := 6.0
+	draw_line(Vector2(center.x - sz, center.y - sz),
+			  Vector2(center.x + sz, center.y + sz), C_KILLS, 2.0)
+	draw_line(Vector2(center.x + sz, center.y - sz),
+			  Vector2(center.x - sz, center.y + sz), C_KILLS, 2.0)
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #  PRIMITIVAS DE DIBUJO
@@ -306,6 +254,12 @@ func _text(t: String, pos: Vector2, fs: int, col: Color) -> void:
 	draw_string(_font, Vector2(pos.x, pos.y + _font.get_ascent(fs)),
 				t, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, col)
 
+func _text_right(t: String, right_x: float, top_y: float, fs: int, col: Color) -> void:
+	if t.is_empty() or not is_instance_valid(_font): return
+	var tw := _str_w(t, fs)
+	draw_string(_font, Vector2(right_x - tw, top_y + _font.get_ascent(fs)),
+				t, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, col)
+
 func _text_center(t: String, center: Vector2, fs: int, col: Color) -> void:
 	if t.is_empty() or not is_instance_valid(_font): return
 	var tw       := _str_w(t, fs)
@@ -313,14 +267,18 @@ func _text_center(t: String, center: Vector2, fs: int, col: Color) -> void:
 	draw_string(_font, Vector2(center.x - tw * 0.5, baseline),
 				t, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, col)
 
+func _text_center_dp(t: String, center: Vector2, fs: int, col: Color) -> void:
+	if t.is_empty(): return
+	var f := _font_dpcomic if is_instance_valid(_font_dpcomic) else _font
+	if not is_instance_valid(f): return
+	var tw       := f.get_string_size(t, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+	var baseline := center.y + (f.get_ascent(fs) - f.get_descent(fs)) * 0.5
+	draw_string(f, Vector2(center.x - tw * 0.5, baseline),
+				t, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, col)
+
 func _str_w(t: String, fs: int) -> float:
 	if not is_instance_valid(_font): return 0.0
 	return _font.get_string_size(t, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
-
-func _hp_color(pct: float) -> Color:
-	if pct > 0.5:  return C_HP_HIGH
-	if pct > 0.25: return C_HP_MID
-	return C_HP_LOW
 
 func _fmt_score(s: int) -> String:
 	if s <= 0: return "0"
@@ -333,39 +291,36 @@ func _fmt_score(s: int) -> String:
 func _gui_input(event: InputEvent) -> void:
 	if not is_instance_valid(_player) or not ("weapons" in _player):
 		return
-		
-	# RESTRICCIÓN: Ahora usa el GameManager para saber si habilitar toques
+
 	if GameManager.is_mobile():
-		# Detectar toques en pantalla (o clicks de ratón simulados en móvil)
 		if (event is InputEventScreenTouch or event is InputEventMouseButton) and event.is_pressed():
 			var n : int = _player.weapons.size()
 			if n == 0: return
 
-			var total_w : float = n * WEP_SLOT_W + (n - 1) * WEP_GAP
-			var sx0     : float = size.x * 0.5 - total_w * 0.5
-			var by      : float = size.y - WEP_SLOT_H - 18.0
+			var slot_w  : float = 68.0
+			var slot_h  : float = 60.0
+			var gap     : float = 6.0
+			var total_h : float = n * slot_h + (n - 1) * gap
+			var sx      : float = 8.0
+			var sy      : float = size.y * 0.5 - total_h * 0.5
 
 			var ev_pos : Vector2 = event.position
-			
-			# Verificamos si tocamos dentro de los cuadrados de armas
+
 			for i in range(n):
-				var sx : float = sx0 + i * (WEP_SLOT_W + WEP_GAP)
-				var rect := Rect2(sx, by, WEP_SLOT_W, WEP_SLOT_H)
-				
+				var sy_i : float = sy + i * (slot_h + gap)
+				var rect := Rect2(sx, sy_i, slot_w, slot_h)
+
 				if rect.has_point(ev_pos):
-					# Simular como si el jugador hubiese presionado la tecla
 					var key_ev := InputEventKey.new()
 					key_ev.keycode = (KEY_1 + i) as Key
 					key_ev.pressed = true
 					Input.parse_input_event(key_ev)
-					
-					# --- NUEVO: Esperar un frame para que el jugador logre registrar la tecla ---
+
 					await get_tree().process_frame
-					
-					# Liberar tecla virtual
+
 					var key_release = key_ev.duplicate()
 					key_release.pressed = false
 					Input.parse_input_event(key_release)
-					
-					get_viewport().set_input_as_handled() # Consumir el evento
+
+					get_viewport().set_input_as_handled()
 					return

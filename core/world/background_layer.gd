@@ -20,9 +20,9 @@ uniform vec2 world_size     = vec2(1280.0, 720.0);
 const float TILE_SIZE  = 64.0;
 const float GRID_EVERY = 256.0;
 
-const vec3 COL_A = vec3(0.08, 0.08, 0.08);
-const vec3 COL_B = vec3(0.11, 0.11, 0.11);
-const vec3 GRID  = vec3(0.18, 0.18, 0.18);
+const vec3 COL_A = vec3(0.17, 0.16, 0.15);
+const vec3 COL_B = vec3(0.20, 0.19, 0.18);
+const vec3 GRID  = vec3(0.26, 0.25, 0.24);
 
 // ── Línea anti-aliased ────────────────────────────────────────────
 // Devuelve [0,1]: 1.0 = sobre la línea, 0.0 = fuera.
@@ -56,7 +56,7 @@ void fragment() {
     float ly = aa_line(sw.y, GRID_EVERY, px_y, 0.5);
     float l  = max(lx, ly);
 
-    col = mix(col, GRID, l * 0.60);
+	col = mix(col, GRID, l * 0.35);
 
     COLOR = vec4(col, 1.0);
 }

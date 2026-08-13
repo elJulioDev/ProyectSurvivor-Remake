@@ -14,12 +14,12 @@ signal enemy_killed(pos: Vector2, points: int, type_id: int)
 const MAX_ENEMIES = 1200  # buffer interno (el cap real lo controla SpawnManager)
 
 const TYPES = {
-	"small":    { "id": 0, "size_mult": 0.70, "health": 40.0,  "speed_mult": 1.15, "damage": 6,  "color": Color8(160,240,160), "points": 5 },
-	"normal":   { "id": 1, "size_mult": 0.90, "health": 90.0,  "speed_mult": 1.0,  "damage": 12, "color": Color8(70,160,70),   "points": 10 },
-	"large":    { "id": 2, "size_mult": 1.1,  "health": 220.0, "speed_mult": 0.70, "damage": 18, "color": Color8(30,100,30),   "points": 20 },
-	"tank":     { "id": 3, "size_mult": 1.3,  "health": 700.0, "speed_mult": 0.35, "damage": 30, "color": Color8(45,65,30),    "points": 60 },
-	"exploder": { "id": 4, "size_mult": 0.95, "health": 70.0,  "speed_mult": 0.80, "damage": 0,  "color": Color8(255,80,20),   "points": 22 },
-	"spitter":  { "id": 5, "size_mult": 1.0,  "health": 110.0, "speed_mult": 0.65, "damage": 8,  "color": Color8(80,210,50),   "points": 30 },
+	"small":    { "id": 0, "size_mult": 0.70, "health": 40.0,  "speed_mult": 1.15, "damage": 6,  "color": Color8(100,170,90),  "points": 5 },
+	"normal":   { "id": 1, "size_mult": 0.90, "health": 90.0,  "speed_mult": 1.0,  "damage": 12, "color": Color8(50,120,50),   "points": 10 },
+	"large":    { "id": 2, "size_mult": 1.1,  "health": 220.0, "speed_mult": 0.70, "damage": 18, "color": Color8(35,85,30),    "points": 20 },
+	"tank":     { "id": 3, "size_mult": 1.3,  "health": 700.0, "speed_mult": 0.35, "damage": 30, "color": Color8(40,55,25),    "points": 60 },
+	"exploder": { "id": 4, "size_mult": 0.95, "health": 70.0,  "speed_mult": 0.80, "damage": 0,  "color": Color8(200,60,15),   "points": 22 },
+	"spitter":  { "id": 5, "size_mult": 1.0,  "health": 110.0, "speed_mult": 0.65, "damage": 8,  "color": Color8(60,160,40),   "points": 30 },
 }
 
 # Velocidad base reducida a 65 (era 100) — movimiento más táctico tipo VS
@@ -102,29 +102,41 @@ void vertex() {
 void fragment() {
 	int type_idx = int(round(custom_data.r));
 	vec3 base_color = enemy_colors[type_idx];
-	vec3 border_color = base_color * 0.5;
+	vec3 border_color = base_color * 0.28;
 	vec2 uv = UV - 0.5;
 
 	vec4 final_color = vec4(0.0);
-	if (abs(uv.x) <= 0.35 && abs(uv.y) <= 0.35) {
+
+	// ── Outline negro (único borde fino) ───────────────────────
+	float edge = 0.44;
+	float body = 0.40;
+	// Borde: fuera del cuerpo pero dentro del sprite
+	if ((abs(uv.x) > body || abs(uv.y) > body) && abs(uv.x) <= edge && abs(uv.y) <= edge) {
+		final_color = vec4(0.0, 0.0, 0.0, 1.0);
+	}
+
+	// ── Cuerpo principal ───────────────────────────────────────
+	if (abs(uv.x) <= body && abs(uv.y) <= body) {
 		final_color = vec4(base_color, 1.0);
-		if (abs(uv.x) < 0.12 && abs(uv.y) < 0.12) { final_color.rgb = border_color; }
-		if (abs(uv.x) > 0.31 || abs(uv.y) > 0.31)  { final_color.rgb = border_color; }
+		// Centro más oscuro (ojo/núcleo)
+		if (abs(uv.x) < 0.10 && abs(uv.y) < 0.10) { final_color.rgb = border_color; }
+		// Flash de golpe
 		final_color.rgb = mix(final_color.rgb, vec3(1.0), custom_data.b);
 	}
 
-	if (UV.y > 0.88 && UV.y < 0.98 && custom_data.a > 0.5) {
-		if (UV.x > 0.15 && UV.x < 0.85) {
-			final_color = vec4(0.1, 0.1, 0.1, 1.0);
-			if (UV.y > 0.90 && UV.y < 0.96 && UV.x > 0.17 && UV.x < 0.83) {
-				float hp_bar_x = (UV.x - 0.17) / 0.66;
-				if (hp_bar_x < custom_data.g) {
-					vec3 hp_col = custom_data.g < 0.3 ?
-						vec3(1.0, 0.0, 0.0) : vec3(1.0, 0.6, 0.0);
-					final_color.rgb = hp_col;
-				} else {
-					final_color.rgb = vec3(0.25, 0.0, 0.0);
-				}
+	// ── Barra de vida ──────────────────────────────────────────
+	if (UV.y > 0.86 && UV.y < 0.98 && custom_data.a > 0.5) {
+		if (UV.x > 0.12 && UV.x < 0.88) {
+			// Fondo de la barra
+			final_color = vec4(0.05, 0.05, 0.05, 1.0);
+			// Relleno de vida
+			float hp_bar_x = (UV.x - 0.12) / 0.76;
+			if (hp_bar_x < custom_data.g) {
+				vec3 hp_col = custom_data.g < 0.3 ?
+					vec3(0.85, 0.05, 0.05) : vec3(0.90, 0.55, 0.05);
+				final_color = vec4(hp_col, 1.0);
+			} else {
+				final_color = vec4(0.18, 0.0, 0.0, 1.0);
 			}
 		}
 	}
@@ -416,7 +428,7 @@ func _physics_process(delta: float) -> void:
 		var dist_y = absf(pos.y - cam_center.y)
 
 		if dist_x < half_screen_x and dist_y < half_screen_y:
-			var quad_size = sizes[i] * 1.4
+			var quad_size = sizes[i] * 1.6
 			var t = Transform2D(0, Vector2(quad_size, quad_size), 0, pos)
 			multimesh.set_instance_transform_2d(visible_count, t)
 
