@@ -670,12 +670,7 @@ func damage_enemy(idx: int, amount: float, hit_dir: Vector2 = Vector2.ZERO,
 	hit_flashes[idx]  = 1.0
 
 	if is_instance_valid(GameManager.damage_numbers) and amount >= 1.0:
-		var dn_color := Color(1.0, 1.0, 0.8)
-		if amount >= 30.0:
-			dn_color = Color(1.0, 0.5, 0.2)
-		elif amount >= 15.0:
-			dn_color = Color(1.0, 0.85, 0.4)
-		GameManager.damage_numbers.spawn_damage(positions[idx], amount, dn_color)
+		GameManager.damage_numbers.spawn_damage(positions[idx], amount)
 
 	if not skip_blood:
 		bleed_intensities[idx] = minf(40.0, bleed_intensities[idx] + amount)

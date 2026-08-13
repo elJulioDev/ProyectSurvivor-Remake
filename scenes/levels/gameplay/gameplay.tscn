@@ -12,6 +12,8 @@
 [ext_resource type="Script" uid="uid://nouqrp4ybg4q" path="res://core/managers/enemy_projectile_manager.gd" id="11_ctvyo"]
 [ext_resource type="Script" uid="uid://dvdv3q458pa1t" path="res://core/managers/gem_manager.gd" id="12_2i4lx"]
 [ext_resource type="Script" uid="uid://c0qd5hgf6wahq" path="res://core/managers/projectile_manager.gd" id="12_qixtg"]
+[ext_resource type="Script" uid="uid://bdnfp706fs53x" path="res://core/managers/damage_number_manager.gd" id="13_26enb"]
+[ext_resource type="FontFile" uid="uid://ckth3dthw5hj" path="res://assets/fonts/PressStart2P.ttf" id="14_40bdn"]
 
 [node name="Gameplay" type="Node2D" unique_id=1330324624]
 script = ExtResource("1_6p5th")
@@ -74,3 +76,13 @@ script = ExtResource("12_qixtg")
 
 [node name="EnemyProjectileManager" type="Node2D" parent="." unique_id=312579278]
 script = ExtResource("11_ctvyo")
+
+[node name="DamageNumberManager" type="Node2D" parent="." unique_id=973978076]
+script = ExtResource("13_26enb")
+font = ExtResource("14_40bdn")
+outline_size = 10
+outline_color = Color(0, 0, 0, 1)
+threshold_colors = Array[Color]([Color(1, 0.85, 0.4, 1), Color(1, 0.5, 0.2, 1), Color(1, 0.2, 0.2, 1)])
+float_speed = 20.0
+fade_time = 0.8
+start_scale = 1.2

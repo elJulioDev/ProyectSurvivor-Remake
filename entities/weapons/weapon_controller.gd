@@ -322,7 +322,7 @@ func _fire_laser(weapon: WeaponData) -> void:
 		if _closest_point_on_segment(start, laser_end_point, b_pos).distance_squared_to(b_pos) <= b_half * b_half:
 			boss.take_damage(dmg, Vector2.ZERO, 0.0)
 			if is_instance_valid(GameManager.damage_numbers):
-				GameManager.damage_numbers.spawn_damage(b_pos, dmg, Color(1.0, 0.3, 0.3))
+				GameManager.damage_numbers.spawn_damage(b_pos, dmg)
 
 # ════════════════════════════════════════════════════════════════════
 #  DRAW — miras, fogonazos, láser (sin cambios respecto al original)

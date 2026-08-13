@@ -245,7 +245,7 @@ func _physics_process(delta: float) -> void:
 					var vn := velocities[bi].normalized()
 					boss.take_damage(float(damages[bi]), vn, 8.0 * kb_mults[bi])
 					if is_instance_valid(GameManager.damage_numbers):
-						GameManager.damage_numbers.spawn_damage(bpos, float(damages[bi]), Color(1.0, 0.3, 0.3))
+						GameManager.damage_numbers.spawn_damage(bpos, float(damages[bi]))
 					penetrations[bi] -= 1
 					if penetrations[bi] <= 0:
 						_on_death(bi, true)

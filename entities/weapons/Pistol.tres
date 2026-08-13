@@ -1,7 +1,6 @@
 [gd_resource type="Resource" script_class="WeaponData" format=3 uid="uid://cjlunwl7rucau"]
 
 [ext_resource type="Script" uid="uid://bicdaci6tavf0" path="res://entities/weapons/weapon_data.gd" id="1_0ati4"]
-[ext_resource type="AudioStream" uid="uid://dscf1cbab734j" path="res://assets/sounds/pistol2.wav" id="1_ees2n"]
 
 [resource]
 script = ExtResource("1_0ati4")
@@ -14,7 +13,6 @@ projectile_speed_max = 16.0
 max_lifetime = 120.0
 shake_amount = 2.0
 projectile_radius = 6.0
-fire_sound = ExtResource("1_ees2n")
 fire_sound_volume = 0.0
 fire_sound_pitch_rand = 0.0
 metadata/_custom_type_script = "uid://bicdaci6tavf0"
